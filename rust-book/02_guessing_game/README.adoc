@@ -1,0 +1,12 @@
+= Guessing game
+
+Tutorial from
+https://doc.rust-lang.org/book/ch02-00-guessing-game-tutorial.html
+
+[source,sh]
+----
+cargo build
+cargo run
+
+# input number and try to guess :-)
+----
