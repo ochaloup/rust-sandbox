@@ -1,0 +1,10 @@
+[source,sh]
+----
+cargo new cargo
+cd cargo
+
+cargo check
+cargo build
+./target/debug/cargo
+cargo run
+----

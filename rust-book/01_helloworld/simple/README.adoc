@@ -1,0 +1,5 @@
+[source,bash]
+----
+rustc main.rs
+./main
+----

@@ -1,0 +1,5 @@
+= Rust book examples
+
+From
+
+https://doc.rust-lang.org/book/
