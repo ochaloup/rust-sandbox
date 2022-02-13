@@ -1,0 +1,8 @@
+= A fibonnaci try
+
+[source,sh]
+----
+# when possible that memory overflows use the RUST_BACKTRACE=1
+# only after that the error prints stacktrace
+RUST_BACKTRACE=full cargo run
+----

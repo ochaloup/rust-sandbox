@@ -6,12 +6,12 @@ fn main() {
     io::stdin().read_line(&mut sequence_number).expect("Input reading error");
     let sequence_number: u32 = sequence_number.trim().parse().expect("Input is not a unsigned number");
 
-    let mut result: u32 = 0;
-    let mut next: u32 = 1;
+    let mut current: u64 = 0;
+    let mut next: u64 = 1;
     for _ in 1..sequence_number {
-        let previous = result;
-        result = next;
-        next = previous + next;
+        let previous = current;
+        current = next;
+        next = previous + current;
     }
-    println!("Fibonnaci number at place {} is: {}", sequence_number, result);
+    println!("Fibonnaci number at place {} is: {}", sequence_number, current);
 }
