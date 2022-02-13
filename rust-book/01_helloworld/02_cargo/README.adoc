@@ -1,10 +1,13 @@
 [source,sh]
 ----
 cargo new cargo
-cd cargo
+mv cargo 02_cargo; cd 02_cargo
 
 cargo check
 cargo build
 ./target/debug/cargo
 cargo run
+
+cargo build --release
+./target/released/cargo
 ----
