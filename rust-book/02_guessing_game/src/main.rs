@@ -30,6 +30,11 @@ fn main() {
             }
         };
 
+        if guess > max {
+            eprint!("Max permitted number was said to be {}!!!\n", max);
+            break;
+        }
+
         // println!("Your guess was {}", guess);
         match guess.cmp(&rand_number) {
             Ordering::Less => println!("Too small!"),
