@@ -1,0 +1,11 @@
+= 03 Common programming concepts - 01 - variables
+
+https://doc.rust-lang.org/book/ch03-01-variables-and-mutability.html
+
+[source,sh]
+----
+cargo build
+cargo run --bin variables
+cargo run --bin shadowing
+cargo run --bin types
+----

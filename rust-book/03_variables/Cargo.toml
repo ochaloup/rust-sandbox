@@ -13,8 +13,8 @@ name = "variables"
 path = "src/main.rs"
 
 [[bin]]
-name = "shadow"
-path = "src/shadow.rs"
+name = "shadowing"
+path = "src/shadowing.rs"
 
 [[bin]]
 name = "types"
