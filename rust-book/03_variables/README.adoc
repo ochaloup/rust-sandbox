@@ -8,4 +8,5 @@ cargo build
 cargo run --bin variables
 cargo run --bin shadowing
 cargo run --bin types
+cargo run --bin statements
 ----

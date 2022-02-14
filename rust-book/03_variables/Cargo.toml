@@ -19,3 +19,7 @@ path = "src/shadowing.rs"
 [[bin]]
 name = "types"
 path = "src/types.rs"
+
+[[bin]]
+name = "statements"
+path = "src/statements.rs"
