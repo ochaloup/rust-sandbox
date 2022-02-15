@@ -3,6 +3,9 @@
 From
 https://github.com/solana-labs/example-helloworld
 
+
+== Deploying Rust contract
+
 [source,sh]
 ----
 solana config set --url localhost
@@ -29,4 +32,15 @@ solana program deploy dist/program/helloworld.so
 
 # solana program key pair can be found at dist/program/helloworld-keypair.json
 export PROGRAM_KEYPAIR=${PWD}/dist/program/helloworld-keypair.json
+----
+
+
+== Working with Python client
+
+[source,sh]
+----
+cd client-python
+pip install -r requirements.txt
+
+python3 hello_client.py -p ../program-rust/dist/program/helloworld-keypair.json
 ----

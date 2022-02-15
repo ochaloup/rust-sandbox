@@ -2,17 +2,22 @@ import asyncio
 import base64
 import imp
 import json
+
+from numpy import sign
+from tomlkit import key
 import layout
 import os
 
 from argparse import ArgumentParser, Namespace
 from os import environ
+from solana.rpc.types import TxOpts
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Processed
 from solana.keypair import Keypair
 from solana.publickey import PublicKey
-from solana.transaction import Transaction
+from solana.transaction import Transaction, SigPubkeyPair
 from solana.system_program import create_account_with_seed, CreateAccountWithSeedParams
+from solana.blockhash import Blockhash
 
 DERIVED_ADDRESS_SEED = 'HELLOWORLD'
 
@@ -116,7 +121,7 @@ async def main(args: Namespace):
             raise ValueError(f'Expected the account {program_keypair.public_key} is an executable program but it is not, {account_info_json}')
         
         recent_blockhash_json = await client.get_recent_blockhash()
-        recent_blockhash:str = recent_blockhash_json['result']['value']['blockhash']
+        recent_blockhash = Blockhash(recent_blockhash_json['result']['value']['blockhash'])
         lamport_per_signature:int = recent_blockhash_json['result']['value']['feeCalculator']['lamportsPerSignature']
         
         balance_json = await client.get_balance(pubkey=keypair.public_key)
@@ -142,21 +147,35 @@ async def main(args: Namespace):
             print(f'Account {program_derived_address} exists')
         else:
             print(f'Account DOES NOT {program_derived_address} exists')
-            create_account_data = CreateAccountWithSeedParams(
+            create_account_instruction = create_account_with_seed(CreateAccountWithSeedParams(
                 from_pubkey=keypair.public_key,
                 base_pubkey=keypair.public_key,
                 new_account_pubkey=program_derived_address,
-                seed=DERIVED_ADDRESS_SEED,
+                # seed=DERIVED_ADDRESS_SEED,
+                seed={"length": len(DERIVED_ADDRESS_SEED), "chars": DERIVED_ADDRESS_SEED},
                 lamports=rent_exemption_fee,
                 space=layout.GREETING_ACCOUNT.sizeof(),
                 program_id=program_keypair.public_key
-             )
-            create_account_instruction = create_account_with_seed(create_account_data)
-            pda_creation_txn = Transaction().add(create_account_instruction)
-            response = client.send_transaction(
-                txn=pda_creation_txn,
-                signers=keypair,
-                recent_blockhash=recent_blockhash
+            ))
+            pda_creation_txn = Transaction(
+                recent_blockhash=recent_blockhash,
+                nonce_info=None,
+                fee_payer=keypair.public_key,
+                # signatures=[SigPubkeyPair(keypair.public_key)]
+            )
+            print(f'1111 {pda_creation_txn.signatures}')
+            pda_creation_txn.add(create_account_instruction)
+            print(f'2222 {pda_creation_txn.signatures}')
+            pda_creation_txn.sign(keypair)
+            print(f'3333 {pda_creation_txn.signatures}')
+            # print(f'>>>>>>>> {recent_blockhash}')
+            # print(f'---- {pda_creation_txn.recent_blockhash}')
+            # # pda_creation_txn.recent_blockhash = recent_blockhash
+            # print(f'---- {pda_creation_txn.recent_blockhash}')
+            # pda_creation_txn.sign(keypair)
+            # await client.simulate_transaction(pda_creation_txn)
+            response = await client.send_transaction(
+                pda_creation_txn, keypair
             )
             print(f'Create transaction response: {response}')
 
