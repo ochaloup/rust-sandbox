@@ -1,12 +1,16 @@
 import asyncio
-import layout
 import base64
+import json
+import layout
+import os
 
-from os import environ
 from argparse import ArgumentParser, Namespace
+from os import environ
 from solana.rpc import types
+from pathlib import Path
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Processed
+from solana.keypair import Keypair
 
 def get_args() -> Namespace:
     parser= ArgumentParser(description="PySerum API testing program")
@@ -26,10 +30,10 @@ def get_args() -> Namespace:
     )
     parser.add_argument(
         "-p",
-        "--program",
+        "--program-keypair",
         type=str,
-        help="Program id where solana example helloworld resides",
-        default="2LdmqPNkd5sRa2ZeNJ6sXWYsytoce29dm3QXSuer3W9j"
+        help="Path to file with program keypair",
+        default=f"{environ['PROGRAM_KEYPAIR'] if 'PROGRAM_KEYPAIR' in environ else None}"
     )
     return parser.parse_args()
 
@@ -78,23 +82,44 @@ class GreetingAccount(ProgramAccount):
         greeting_layout = layout.GREETING_ACCOUNT.parse(self.data)
         self.counter = greeting_layout.counter
 
+def load_file(filename: str) -> bytes:
+    if not os.path.isfile(filename):
+        raise ValueError(f"File with key '{filename}' does not exist")
+    else:
+        with open(filename) as key_file:
+            data = json.load(key_file)
+            return bytes(bytearray(data))
 
-
-# def parse_from_layout(account_info: AccountInfo, name: str, instrument_lookup: InstrumentLookup, market_lookup: MarketLookup) -> "Group":
-#     data = account_info.data
-#     if len(data) != layouts.GROUP.sizeof():
-#         raise Exception(
-#             f"Group data length ({len(data)}) does not match expected size ({layouts.GROUP.sizeof()})")
-
-#     layout = layouts.GROUP.parse(data)
-#     return Group.from_layout(layout, name, account_info, Version.V3, instrument_lookup, market_lookup)
 
 async def main(args: Namespace):
+    # keypair_file = Path(args.keypair)
+    keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
+    # program_keypair_file = Path(args.program_keypair)
+    program_keypair:Keypair = Keypair.from_secret_key(load_file(args.program_keypair))
+
     async with AsyncClient(args.url) as client:
         res = await client.is_connected()
-        account_info = await client.get_account_info(pubkey=args.program)
-    greeting = GreetingAccount(account_info)
-    print(f'account: {greeting}')
+        account_info_json = await client.get_account_info(pubkey=program_keypair.public_key)
+        
+        recent_blockhash_json = await client.get_recent_blockhash()
+        recent_blockhash:str = recent_blockhash_json['result']['value']['blockhash']
+        lamport_per_signature:int = recent_blockhash_json['result']['value']['feeCalculator']['lamportsPerSignature']
+        
+        balance_json = await client.get_balance(pubkey=keypair.public_key)
+        balance:int = balance_json['result']['value']
+
+        min_balance_json = await client.get_minimum_balance_for_rent_exemption(layout.GREETING_ACCOUNT.sizeof())
+        min_balance = min_balance_json['result']
+
+        # account balance is under rent for data account and price for sending a transaction
+        if balance < min_balance + lamport_per_signature:
+            await client.request_airdrop()
+    # greeting = GreetingAccount(account_info_json)
+
+    print(f'account [{program_keypair.public_key}]: {account_info_json}')
+    print(f'blockhash: {recent_blockhash}/{lamport_per_signature}')
+    print(f'balance [{keypair.public_key}]: {balance_json}')
+    print(f'min balance: {min_balance}')
 
 args = get_args()
 asyncio.run(main(args))

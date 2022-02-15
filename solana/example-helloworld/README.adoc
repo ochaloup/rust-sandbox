@@ -26,4 +26,7 @@ cargo test-bpf --manifest-path=./Cargo.toml
 solana program deploy dist/program/helloworld.so
 ## deployment configuration at: /home/chalda/.config/solana/cli/config.yml
 ## https://explorer.solana.com can be switched to http://localhost:8899 and program id (account) can be checked
+
+# solana program key pair can be found at dist/program/helloworld-keypair.json
+export PROGRAM_KEYPAIR=${PWD}/dist/program/helloworld-keypair.json
 ----
