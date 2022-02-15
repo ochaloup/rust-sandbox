@@ -15,4 +15,15 @@ solana-keygen pubkey /home/chalda/.config/solana/id.json
 # start test validator and eploy program
 solana-keygen pubkey /home/chalda/.config/solana/id.json
 solana logs
+
+cd example-helloworld/program-rust
+cargo build --release  # just download dependencies and check if can be build
+# build with solana
+cargo build-bpf --manifest-path=./Cargo.toml --bpf-out-dir=dist/program
+# test
+cargo test-bpf --manifest-path=./Cargo.toml
+# deploy
+solana program deploy dist/program/helloworld.so
+## deployment configuration at: /home/chalda/.config/solana/cli/config.yml
+## https://explorer.solana.com can be switched to http://localhost:8899 and program id (account) can be checked
 ----
