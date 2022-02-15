@@ -1,0 +1,18 @@
+= example-helloworld
+
+From
+https://github.com/solana-labs/example-helloworld
+
+[source,sh]
+----
+solana config set --url localhost
+solana-keygen new --force
+# Wrote new keypair to /home/chalda/.config/solana/id.json
+
+# to show the public key
+solana-keygen pubkey /home/chalda/.config/solana/id.json
+
+# start test validator and eploy program
+solana-keygen pubkey /home/chalda/.config/solana/id.json
+solana logs
+----
