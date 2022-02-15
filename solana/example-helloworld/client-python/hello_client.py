@@ -1,16 +1,20 @@
 import asyncio
 import base64
+import imp
 import json
 import layout
 import os
 
 from argparse import ArgumentParser, Namespace
 from os import environ
-from solana.rpc import types
-from pathlib import Path
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Processed
 from solana.keypair import Keypair
+from solana.publickey import PublicKey
+from solana.transaction import Transaction
+from solana.system_program import create_account_with_seed, CreateAccountWithSeedParams
+
+DERIVED_ADDRESS_SEED = 'HELLOWORLD'
 
 def get_args() -> Namespace:
     parser= ArgumentParser(description="PySerum API testing program")
@@ -90,6 +94,14 @@ def load_file(filename: str) -> bytes:
             data = json.load(key_file)
             return bytes(bytearray(data))
 
+def account_exists(json_account_info:dict) -> bool:
+    return (
+        'result' in json_account_info and
+        'context' in json_account_info['result'] and
+        'value' in json_account_info['result']['context'] and
+        json_account_info['result']['context']['value']
+    )
+
 
 async def main(args: Namespace):
     # keypair_file = Path(args.keypair)
@@ -100,6 +112,8 @@ async def main(args: Namespace):
     async with AsyncClient(args.url) as client:
         res = await client.is_connected()
         account_info_json = await client.get_account_info(pubkey=program_keypair.public_key)
+        if not account_info_json['result']['value']['executable']:
+            raise ValueError(f'Expected the account {program_keypair.public_key} is an executable program but it is not, {account_info_json}')
         
         recent_blockhash_json = await client.get_recent_blockhash()
         recent_blockhash:str = recent_blockhash_json['result']['value']['blockhash']
@@ -108,18 +122,50 @@ async def main(args: Namespace):
         balance_json = await client.get_balance(pubkey=keypair.public_key)
         balance:int = balance_json['result']['value']
 
-        min_balance_json = await client.get_minimum_balance_for_rent_exemption(layout.GREETING_ACCOUNT.sizeof())
-        min_balance = min_balance_json['result']
+        rent_exemption_fee_json = await client.get_minimum_balance_for_rent_exemption(layout.GREETING_ACCOUNT.sizeof())
+        rent_exemption_fee = rent_exemption_fee_json['result']
 
         # account balance is under rent for data account and price for sending a transaction
-        if balance < min_balance + lamport_per_signature:
-            await client.request_airdrop()
-    # greeting = GreetingAccount(account_info_json)
+        if balance < rent_exemption_fee + lamport_per_signature:
+            requested_lamports:int = rent_exemption_fee+lamport_per_signature
+            response = await client.request_airdrop(pubkey=keypair.public_key, lamports=requested_lamports)
+            print(f'Requested to get airdrop for {requested_lamports}, result: {response}')
 
+        # getting data pubkey
+        program_derived_address:PublicKey = PublicKey.create_with_seed(
+            from_public_key=keypair.public_key,
+            seed = DERIVED_ADDRESS_SEED,
+            program_id=program_keypair.public_key
+        )
+        pda_account_json = await client.get_account_info(pubkey=program_derived_address)
+        if account_exists(pda_account_json):
+            print(f'Account {program_derived_address} exists')
+        else:
+            print(f'Account DOES NOT {program_derived_address} exists')
+            create_account_data = CreateAccountWithSeedParams(
+                from_pubkey=keypair.public_key,
+                base_pubkey=keypair.public_key,
+                new_account_pubkey=program_derived_address,
+                seed=DERIVED_ADDRESS_SEED,
+                lamports=rent_exemption_fee,
+                space=layout.GREETING_ACCOUNT.sizeof(),
+                program_id=program_keypair.public_key
+             )
+            create_account_instruction = create_account_with_seed(create_account_data)
+            pda_creation_txn = Transaction().add(create_account_instruction)
+            response = client.send_transaction(
+                txn=pda_creation_txn,
+                signers=keypair,
+                recent_blockhash=recent_blockhash
+            )
+            print(f'Create transaction response: {response}')
+
+
+    # greeting = GreetingAccount(account_info_json)
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
-    print(f'blockhash: {recent_blockhash}/{lamport_per_signature}')
+    print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
-    print(f'min balance: {min_balance}')
+    print(f'pda account [{program_derived_address}]: {pda_account_json}')
 
 args = get_args()
 asyncio.run(main(args))
