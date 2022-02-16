@@ -16,6 +16,7 @@ from solana.publickey import PublicKey
 from solana.transaction import Transaction, TransactionInstruction, AccountMeta
 from solana.system_program import create_account_with_seed, CreateAccountWithSeedParams
 from solana.blockhash import Blockhash
+from datetime import datetime, timedelta
 
 DERIVED_ADDRESS_SEED = 'HELLOWORLD'
 
@@ -125,6 +126,10 @@ def get_greet_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhas
     ).add(greet_instruction)
 
 
+def delta_time(time_start_at: datetime) -> float:
+    time_delta: timedelta = datetime.now() - time_start_at
+    return time_delta.seconds + time_delta.microseconds / 1000000
+
 
 
 async def main(args: Namespace):
@@ -190,6 +195,13 @@ async def main(args: Namespace):
             txn = get_greet_txn(keypair.public_key, program_keypair.public_key)
             response = await client.send_transaction(txn, keypair)
             print(f'Sending greet txn response: {response}')
+            time_start_at = datetime.now()
+            while not (await client.get_transaction(response['result']))['result']:
+                if delta_time(time_start_at) > 15:
+                    print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
+                    break
+                sleep(0.2)
+            print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
             pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
         
         greeting_account_after = GreetingAccount(pda_account_json)
