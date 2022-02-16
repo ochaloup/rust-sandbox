@@ -1,21 +1,17 @@
 import asyncio
 import base64
-import imp
 import json
 
-from numpy import sign
-from tomlkit import key
 import layout
 import os
 
 from argparse import ArgumentParser, Namespace
 from os import environ
-from solana.rpc.types import TxOpts
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Processed
 from solana.keypair import Keypair
 from solana.publickey import PublicKey
-from solana.transaction import Transaction, SigPubkeyPair
+from solana.transaction import Transaction
 from solana.system_program import create_account_with_seed, CreateAccountWithSeedParams
 from solana.blockhash import Blockhash
 
@@ -73,11 +69,11 @@ class ProgramAccount:
         if not 'result' in json_data:
             raise ValueError(f'Expected json data does not contain result field but are {json_data}')
         result = json_data['result']
-        if not result['value']['executable']:
-            raise ValueError(f'Expected the account data is an executable program but it is not, {json_data}')
+        if result['value']['executable']:
+            raise ValueError(f'Expected the account is an data account but it is executable, {json_data}')
         self.id: int = json_data['id']
         self.latest_slot: int = result['context']['slot']
-        print(f"data data: {result['value']['data'][0]}")
+        # print(f"we have some base64 data here: {result['value']['data'][0]}")
         self.data: bytes = base64.b64decode(result['value']['data'][0])  # expected to be base64
         self.lamports: int = result['value']['lamports']
         self.executable: bool = result['value']['executable']
@@ -102,9 +98,8 @@ def load_file(filename: str) -> bytes:
 def account_exists(json_account_info:dict) -> bool:
     return (
         'result' in json_account_info and
-        'context' in json_account_info['result'] and
-        'value' in json_account_info['result']['context'] and
-        json_account_info['result']['context']['value']
+        'value' in json_account_info['result'] and
+        json_account_info['result']['value'] is not None
     )
 
 
@@ -143,10 +138,9 @@ async def main(args: Namespace):
             program_id=program_keypair.public_key
         )
         pda_account_json = await client.get_account_info(pubkey=program_derived_address)
-        if account_exists(pda_account_json):
-            print(f'Account {program_derived_address} exists')
-        else:
-            print(f'Account DOES NOT {program_derived_address} exists')
+        # print(f"PDA account json: {pda_account_json}")
+        if not account_exists(pda_account_json):
+            print(f'Account {program_derived_address} DOES NOT exists')
             create_account_instruction = create_account_with_seed(CreateAccountWithSeedParams(
                 from_pubkey=keypair.public_key,
                 base_pubkey=keypair.public_key,
@@ -161,30 +155,22 @@ async def main(args: Namespace):
                 recent_blockhash=recent_blockhash,
                 nonce_info=None,
                 fee_payer=keypair.public_key,
-                # signatures=[SigPubkeyPair(keypair.public_key)]
-            )
-            print(f'1111 {pda_creation_txn.signatures}')
-            pda_creation_txn.add(create_account_instruction)
-            print(f'2222 {pda_creation_txn.signatures}')
-            pda_creation_txn.sign(keypair)
-            print(f'3333 {pda_creation_txn.signatures}')
-            # print(f'>>>>>>>> {recent_blockhash}')
-            # print(f'---- {pda_creation_txn.recent_blockhash}')
-            # # pda_creation_txn.recent_blockhash = recent_blockhash
-            # print(f'---- {pda_creation_txn.recent_blockhash}')
+            ).add(create_account_instruction)
             # pda_creation_txn.sign(keypair)
             # await client.simulate_transaction(pda_creation_txn)
             response = await client.send_transaction(
                 pda_creation_txn, keypair
             )
-            print(f'Create transaction response: {response}')
+            print(f'Create PDA account txn response: {response}')
+            pda_account_json = await client.get_account_info(pubkey=program_derived_address)
 
+        greeting_account = GreetingAccount(pda_account_json)
 
-    # greeting = GreetingAccount(account_info_json)
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
     print(f'pda account [{program_derived_address}]: {pda_account_json}')
+    print(f'\nCOUNTER IS {greeting_account.counter}')
 
 args = get_args()
 asyncio.run(main(args))
