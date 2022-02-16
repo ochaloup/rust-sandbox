@@ -15,8 +15,8 @@ solana-keygen new --force
 # to show the public key
 solana-keygen pubkey /home/chalda/.config/solana/id.json
 
-# start test validator and eploy program
-solana-keygen pubkey /home/chalda/.config/solana/id.json
+# start test validator and deploy program
+solana-test-validator
 solana logs
 
 cd example-helloworld/program-rust

@@ -3,6 +3,8 @@ import base64
 import json
 from time import sleep
 
+from tomlkit import key
+
 import layout
 import os
 
@@ -130,16 +132,8 @@ def delta_time(time_start_at: datetime) -> float:
     time_delta: timedelta = datetime.now() - time_start_at
     return time_delta.seconds + time_delta.microseconds / 1000000
 
-
-
-async def main(args: Namespace):
-    # keypair_file = Path(args.keypair)
-    keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
-    # program_keypair_file = Path(args.program_keypair)
-    program_keypair:Keypair = Keypair.from_secret_key(load_file(args.program_keypair))
-
+async def prepare(keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
     async with AsyncClient(args.url) as client:
-        res = await client.is_connected()
         account_info_json = await client.get_account_info(pubkey=program_keypair.public_key)
         if not account_info_json['result']['value']['executable']:
             raise ValueError(f'Expected the account {program_keypair.public_key} is an executable program but it is not, {account_info_json}')
@@ -188,29 +182,43 @@ async def main(args: Namespace):
             print(f'Create PDA account txn response: {response}')
             pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
 
-        greeting_account_start = GreetingAccount(pda_account_json)
-
-        async with AsyncClient(args.url) as client:
-            program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-            txn = get_greet_txn(keypair.public_key, program_keypair.public_key)
-            response = await client.send_transaction(txn, keypair)
-            print(f'Sending greet txn response: {response}')
-            time_start_at = datetime.now()
-            while not (await client.get_transaction(response['result']))['result']:
-                if delta_time(time_start_at) > 15:
-                    print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
-                    break
-                sleep(0.2)
-            print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
-            pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
-        
-        greeting_account_after = GreetingAccount(pda_account_json)
-
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
     print(f'pda account [{program_derived_address}]: {pda_account_json}')
-    print(f'\nCOUNTER BEFORE {greeting_account_start.counter}, COUNTER AFTER {greeting_account_after.counter}')
+    greeting_account = GreetingAccount(pda_account_json)
+    print(f'\nCOUNTER PREPARE {greeting_account.counter}')
+    return greeting_account
+
+
+async def send_greeting_and_wait(keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
+    async with AsyncClient(endpoint = args.url, commitment=Processed) as client:
+        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        txn = get_greet_txn(keypair.public_key, program_keypair.public_key)
+        response = await client.send_transaction(txn, keypair)
+        print(f'Sending greet txn response: {response}')
+        time_start_at = datetime.now()
+        while not (await client.get_transaction(response['result']))['result']:
+            if delta_time(time_start_at) > 15:
+                print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
+                break
+            sleep(0.2)
+        print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
+        pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
+
+    greeting_account = GreetingAccount(pda_account_json)
+    print(f'\nCOUNTER TXN {greeting_account.counter}')
+
+
+async def main(args: Namespace):
+    # keypair_file = Path(args.keypair)
+    keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
+    # program_keypair_file = Path(args.program_keypair)
+    program_keypair:Keypair = Keypair.from_secret_key(load_file(args.program_keypair))
+
+    await prepare(keypair, program_keypair)
+
+    await send_greeting_and_wait(keypair, program_keypair)
 
 args = get_args()
 asyncio.run(main(args))
