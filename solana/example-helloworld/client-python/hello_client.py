@@ -11,7 +11,7 @@ from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Processed
 from solana.keypair import Keypair
 from solana.publickey import PublicKey
-from solana.transaction import Transaction
+from solana.transaction import Transaction, TransactionInstruction, AccountMeta
 from solana.system_program import create_account_with_seed, CreateAccountWithSeedParams
 from solana.blockhash import Blockhash
 
@@ -102,6 +102,29 @@ def account_exists(json_account_info:dict) -> bool:
         json_account_info['result']['value'] is not None
     )
 
+def get_data_account_pubkey(public_key: PublicKey, program_key: PublicKey) -> PublicKey:
+    # getting data pubkey
+    return PublicKey.create_with_seed(
+        from_public_key=public_key,
+        seed = DERIVED_ADDRESS_SEED,
+        program_id=program_key
+    )
+
+def get_greet_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
+    program_data_key = get_data_account_pubkey(public_key, program_key)
+    greet_instruction = TransactionInstruction(
+        keys=[AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True)],
+        program_id=program_key,
+        data=b''  # empty data, the counter adds on its own
+    )
+    return Transaction(
+        recent_blockhash=recent_blockhash,
+        nonce_info=None,
+        fee_payer=public_key,
+    ).add(greet_instruction)
+
+
+
 
 async def main(args: Namespace):
     # keypair_file = Path(args.keypair)
@@ -131,12 +154,7 @@ async def main(args: Namespace):
             response = await client.request_airdrop(pubkey=keypair.public_key, lamports=requested_lamports)
             print(f'Requested to get airdrop for {requested_lamports}, result: {response}')
 
-        # getting data pubkey
-        program_derived_address:PublicKey = PublicKey.create_with_seed(
-            from_public_key=keypair.public_key,
-            seed = DERIVED_ADDRESS_SEED,
-            program_id=program_keypair.public_key
-        )
+        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         pda_account_json = await client.get_account_info(pubkey=program_derived_address)
         # print(f"PDA account json: {pda_account_json}")
         if not account_exists(pda_account_json):
@@ -164,13 +182,21 @@ async def main(args: Namespace):
             print(f'Create PDA account txn response: {response}')
             pda_account_json = await client.get_account_info(pubkey=program_derived_address)
 
-        greeting_account = GreetingAccount(pda_account_json)
+        greeting_account_start = GreetingAccount(pda_account_json)
+
+        async with AsyncClient(args.url) as client:
+            program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+            txn = get_greet_txn(keypair.public_key, program_keypair.public_key)
+            client.send_transaction(txn, keypair)
+            pda_account_json = await client.get_account_info(pubkey=program_derived_address)
+        
+        greeting_account_after = GreetingAccount(pda_account_json)
 
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
     print(f'pda account [{program_derived_address}]: {pda_account_json}')
-    print(f'\nCOUNTER IS {greeting_account.counter}')
+    print(f'\nCOUNTER BEFORE {greeting_account_start.counter}, COUNTER AFTER {greeting_account_after}')
 
 args = get_args()
 asyncio.run(main(args))
