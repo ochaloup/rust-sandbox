@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+from time import sleep
 
 import layout
 import os
@@ -8,7 +9,8 @@ import os
 from argparse import ArgumentParser, Namespace
 from os import environ
 from solana.rpc.async_api import AsyncClient
-from solana.rpc.commitment import Processed
+from solana.rpc.types import TxOpts
+from solana.rpc.commitment import Processed, Finalized
 from solana.keypair import Keypair
 from solana.publickey import PublicKey
 from solana.transaction import Transaction, TransactionInstruction, AccountMeta
@@ -81,7 +83,6 @@ class ProgramAccount:
 class GreetingAccount(ProgramAccount):
     def __init__(self, json_data: dict) -> None:
         super().__init__(json_data)
-        print(f'DEBUG: {len(self.data)} -> {layout.GREETING_ACCOUNT.sizeof()}')
         if len(self.data) != layout.GREETING_ACCOUNT.sizeof():
             raise Exception('Cannot process data from program as it is not compatible with greeting account')
         greeting_layout = layout.GREETING_ACCOUNT.parse(self.data)
@@ -155,7 +156,7 @@ async def main(args: Namespace):
             print(f'Requested to get airdrop for {requested_lamports}, result: {response}')
 
         program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        pda_account_json = await client.get_account_info(pubkey=program_derived_address)
+        pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
         # print(f"PDA account json: {pda_account_json}")
         if not account_exists(pda_account_json):
             print(f'Account {program_derived_address} DOES NOT exists')
@@ -180,15 +181,16 @@ async def main(args: Namespace):
                 pda_creation_txn, keypair
             )
             print(f'Create PDA account txn response: {response}')
-            pda_account_json = await client.get_account_info(pubkey=program_derived_address)
+            pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
 
         greeting_account_start = GreetingAccount(pda_account_json)
 
         async with AsyncClient(args.url) as client:
             program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
             txn = get_greet_txn(keypair.public_key, program_keypair.public_key)
-            client.send_transaction(txn, keypair)
-            pda_account_json = await client.get_account_info(pubkey=program_derived_address)
+            response = await client.send_transaction(txn, keypair)
+            print(f'Sending greet txn response: {response}')
+            pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
         
         greeting_account_after = GreetingAccount(pda_account_json)
 
@@ -196,7 +198,7 @@ async def main(args: Namespace):
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
     print(f'pda account [{program_derived_address}]: {pda_account_json}')
-    print(f'\nCOUNTER BEFORE {greeting_account_start.counter}, COUNTER AFTER {greeting_account_after}')
+    print(f'\nCOUNTER BEFORE {greeting_account_start.counter}, COUNTER AFTER {greeting_account_after.counter}')
 
 args = get_args()
 asyncio.run(main(args))
