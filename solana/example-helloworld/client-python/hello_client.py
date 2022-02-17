@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 DERIVED_ADDRESS_SEED = 'HELLOWORLD'
 
 def get_args() -> Namespace:
-    parser= ArgumentParser(description="PySerum API testing program")
+    parser= ArgumentParser(description="Solana contract testing program")
     parser.add_argument(
         "-k",
         "--keypair",
@@ -122,7 +122,7 @@ def get_greet_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhas
             AccountMeta(pubkey=program_key, is_signer=True, is_writable=False)
         ],
         program_id=program_key,
-        data=b''  # empty data, the counter adds on its own
+        data=layout.COUNTER_INSTRUCTION.build({})
     )
     return Transaction(
         recent_blockhash=recent_blockhash,
@@ -185,7 +185,6 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Gre
                 pda_creation_txn, keypair
             )
             print(f'Create PDA account txn response: {response}')
-            pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
 
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')

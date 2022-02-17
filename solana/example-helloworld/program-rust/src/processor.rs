@@ -2,6 +2,7 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
     msg,
+    program::{invoke_signed},
     program_error::ProgramError,
     pubkey::Pubkey,
     sysvar::{
@@ -39,7 +40,7 @@ impl Processor {
         msg!("Pubkeys: {}, {}", data_account.owner, program_id);  // TODO: DELETE ME
         // The account must be owned by the program in order to modify its data
         if data_account.owner != program_id {
-            msg!("Greeted account does not have the correct program id");
+            msg!("Data account is now owned by correct program id");
             return Err(ProgramError::IncorrectProgramId);
         }
 
@@ -56,6 +57,7 @@ impl Processor {
         program_id: &Pubkey, // Public key of this program
         accounts: &[AccountInfo], // The PDA account where the data is saved
     ) -> ProgramResult {
+        msg!("ChainKeepers counter program running");
         Self::verify_program_owner(program_id, accounts)?;
 
         let accounts_iter = &mut accounts.iter();
@@ -80,7 +82,21 @@ impl Processor {
         Ok(())
     }
 
-    pub fn process_delete_pda(_program_id: &Pubkey, _accounts: &[AccountInfo]) -> ProgramResult {
+    pub fn process_delete_pda(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+        msg!("Closing the ChainKeepers PDA account");
+        Self::verify_program_owner(program_id, accounts)?;
+
+        invoke_signed(
+            &close_pdas_temp_acc_ix,
+            &[
+                pdas_temp_token_account.clone(),
+                initializers_main_account.clone(),
+                pda_account.clone(),
+                token_program.clone(),
+            ],
+            &[&[&b"escrow"[..], &[bump_seed]]],
+        )?;
+
         Ok(())
     }
 

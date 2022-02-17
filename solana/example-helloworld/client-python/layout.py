@@ -1,7 +1,7 @@
 import construct
 import typing
 import datetime
-from decimal import Decimal, date
+from decimal import Decimal
 
 class U32Adapter(construct.Adapter):  # u32 is unsigned 32 bit integer
     def __init__(self, size: int = 4) -> None:
@@ -30,4 +30,8 @@ class TimestampAdapter(construct.Adapter):  # i64 is signed integer as timestamp
 GREETING_ACCOUNT = construct.Struct(
     "counter" / U32Adapter(),
     "timestamp" / TimestampAdapter()
+)
+
+COUNTER_INSTRUCTION = construct.Struct(
+    "instruction_type" / construct.Const(1, construct.BytesInteger(1, signed = False, swapped=True)),
 )
