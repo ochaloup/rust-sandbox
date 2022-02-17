@@ -2,8 +2,6 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
     msg,
-    system_instruction,
-    program::{invoke_signed, invoke_unchecked, invoke},
     program_error::ProgramError,
     pubkey::Pubkey,
     sysvar::{
@@ -29,7 +27,7 @@ impl Processor {
         let (instruction_type, _rest_data) = parse_instruction(instruction_data);
         return match instruction_type {
             InstructionTypes::Counter => Self::process_counter(program_id, accounts),
-            InstructionTypes::DeletePda => Self::process_delete_pda(program_id, accounts),
+            InstructionTypes::DeletePda => Self::process_delete_data_account(accounts),
             _ => Err(InvalidInstruction.into())
         };
     }
@@ -84,62 +82,23 @@ impl Processor {
         Ok(())
     }
 
-    pub fn process_delete_pda(_program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
-        msg!("Closing the ChainKeepers PDA account");
+    pub fn process_delete_data_account(accounts: &[AccountInfo]) -> ProgramResult {
+        msg!("Closing data account");
 
         let accounts_iter = &mut accounts.iter();
         let data_account = next_account_info(accounts_iter)?;
-        let program_account = next_account_info(accounts_iter)?;
+        let _program_account = next_account_info(accounts_iter)?;
         let transfer_account = next_account_info(accounts_iter)?;
 
-        msg!(">> 5. data: {}, program: {}, transfer: {}", data_account.key, program_account.key, transfer_account.key);
         **transfer_account.try_borrow_mut_lamports()? = transfer_account
             .lamports()
-            .checked_add(1)  // data_account.lamports()
+            .checked_add(data_account.lamports())  // data_account.lamports()
             .ok_or(AmountOverflow)?;
-        **data_account.try_borrow_mut_lamports()? = data_account.lamports() - 1;
-        // *escrow_account.try_borrow_mut_data()? = &mut [];
-
-        // let transfer_txn = system_instruction::transfer(
-        //     &data_account.key,
-        //     &transfer_account.key,
-        //     1,
-        // );
-        // invoke_signed(&transfer_txn,
-        //     &[
-        //         program_account.clone()
-        //     ],
-        //     &[&[ &transfer_account.key.to_bytes(), &b"HELLOWORLD"[..], &program_account.key.to_bytes() ]],
-        // )?;
-        // msg!(">> 3. {}, {}, {}", data_account.key, program_account.key, transfer_account.key);
-        // invoke(&transfer_txn, &[data_account.clone()])?;
-
-
-        // invoke_signed(
-        //     &close_pdas_temp_acc_ix,
-        //     &[
-        //         pdas_temp_token_account.clone(),
-        //         initializers_main_account.clone(),
-        //         pda_account.clone(),
-        //         token_program.clone(),
-        //     ],
-        //     &[&[&b"escrow"[..], &[bump_seed]]],
-        // )?;
+        **data_account.try_borrow_mut_lamports()? = 0;
+        *data_account.try_borrow_mut_data()? = &mut [];
 
         Ok(())
     }
-
-    // pub fn process_delete_pda() -> None {
-    //     msg!("Closing the escrow account...");
-    //     **initializers_main_account.lamports.borrow_mut() = initializers_main_account.lamports()
-    //     .checked_add(escrow_account.lamports())
-    //     .ok_or(EscrowError::AmountOverflow)?;
-    //     **escrow_account.lamports.borrow_mut() = 0;
-    //     *escrow_account.try_borrow_mut_data()? = &mut [];
-
-    //     Ok(())
-
-    // }
 }
 
 // Sanity tests

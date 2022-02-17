@@ -228,7 +228,7 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
                 print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
                 break
         print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
-        pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Processed)
+        pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
 
     counter_account = CounterAccount(pda_account_json)
     print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}')
