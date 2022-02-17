@@ -10,16 +10,23 @@ use solana_program::{
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::{instructions::ChkpCounterAccount};
+use crate::{
+    instructions::{ChkpCounterAccount, parse_instruction, InstructionTypes},
+    errors::ChkpCounterError::{InvalidInstruction}
+};
 
 pub struct Processor;
 impl Processor {
     pub fn process(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
-        _instruction_data: &[u8],
+        instruction_data: &[u8],
     ) -> ProgramResult {
-        Self::process_greetings(program_id, accounts)
+        let (instruction_type, _rest_data) = parse_instruction(instruction_data);
+        return match instruction_type {
+            InstructionTypes::Counter => Self::process_greetings(program_id, accounts),
+            _ => Err(InvalidInstruction.into())
+        };
     }
 
     // Greetings
@@ -120,6 +127,17 @@ mod test {
         Processor::process_greetings(&program_pubkey, &accounts).unwrap();
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 2);
+        assert_eq!(account.timestamp, -1);
+
+
+        let instruction_data = vec![0];
+        let error = Processor::process(&program_pubkey, &accounts, &instruction_data);
+        assert_eq!(error, Err(InvalidInstruction.into()));
+
+        let instruction_data = vec![1];
+        Processor::process(&program_pubkey, &accounts, &instruction_data).unwrap();
+        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        assert_eq!(account.counter, 3);
         assert_eq!(account.timestamp, -1);
     }
 }

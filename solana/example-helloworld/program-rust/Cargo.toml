@@ -13,6 +13,7 @@ no-entrypoint = []
 borsh = "0.9.3"
 borsh-derive = "0.9.1"
 solana-program = "~1.9.7"
+thiserror = "1.0.24"
 
 [dev-dependencies]
 solana-program-test = "~1.9.7"
