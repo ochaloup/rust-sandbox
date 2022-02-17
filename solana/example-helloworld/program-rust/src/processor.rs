@@ -114,7 +114,7 @@ mod test {
         let data_pubkey = Pubkey::new_unique();
         let program_pubkey = Pubkey::new_unique();
         let mut lamports = 0;
-        let mut data = vec![0; mem::size_of::<u32>() + mem::size_of::<i64>()];
+        let mut data = vec![0; mem::size_of::<u32>() + mem::size_of::<i64>() + mem::size_of::<i64>()];
         let data_account = AccountInfo::new(
             &data_pubkey,
             false,
@@ -138,9 +138,8 @@ mod test {
             false,
             Epoch::default(),
         );
-        // let instruction_data: Vec<u8> = Vec::new();
 
-        let accounts = vec![data_account, program_account];
+        let accounts = vec![data_account.clone(), program_account.clone()];
 
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 0);
@@ -166,5 +165,11 @@ mod test {
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 3);
         assert_eq!(account.timestamp, -1);
+
+        let accounts = vec![data_account.clone(), program_account.clone(), program_account.clone()];
+        let instruction_data = vec![2];  // delete account insruction
+        Processor::process(&program_pubkey, &accounts, &instruction_data).unwrap();
+        assert_eq!(accounts[0].lamports(), 0 as u64);
+        assert_eq!(&accounts[0].data.take(), &[]);
     }
 }

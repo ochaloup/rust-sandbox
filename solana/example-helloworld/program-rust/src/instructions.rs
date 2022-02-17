@@ -5,6 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub struct ChkpCounterAccount {
     pub counter: u32,
     pub timestamp: i64,
+    pub sending_timestamp: i64,
 }
 
 pub enum InstructionTypes {
