@@ -79,7 +79,7 @@ impl Processor {
         counter_account.timestamp = timestamp;
         counter_account.serialize(&mut &mut data_account.data.borrow_mut()[..])?;
 
-        msg!("Counter increased {} time(s), time: {}!", counter_account.counter, counter_account.timestamp);
+        msg!("Counter increased {} time(s), date: {}!", counter_account.counter, counter_account.timestamp);
 
         Ok(())
     }

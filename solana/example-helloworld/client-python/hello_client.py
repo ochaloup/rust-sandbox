@@ -212,7 +212,7 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
     return counter_account
 
 
-async def increate_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> CounterAccount:
+async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> CounterAccount:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
         program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         txn = get_counter_txn(keypair.public_key, program_keypair.public_key)
@@ -227,12 +227,11 @@ async def increate_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
             if delta_time(time_start_at) > 15:
                 print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
                 break
-            sleep(0.2)  # TODO: delete me
         print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
         pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
 
     counter_account = CounterAccount(pda_account_json)
-    print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account}')
+    print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}')
 
 
 async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> None:
@@ -270,23 +269,16 @@ async def delete_program_data_account_WRONG(rpc_url: str, keypair:Keypair, progr
             fee_payer=keypair
         ).add(transfer_instruction)
         response = await client.send_transaction(transfer_txn, program_derived_address)
-        print(f'>>> {response}')
+        print(f'>>delete_wrong> {response}')
 
 
 async def delete_program_data_account(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
         program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         print(f'PDA pubkey: {program_derived_address}')
-        transfer_instruction = transfer(TransferParams(
-            from_pubkey = program_derived_address,
-            to_pubkey = program_keypair.public_key,
-            lamports=1
-        ))
-        transfer_txn = Transaction(
-            fee_payer=keypair
-        ).add(transfer_instruction)
-        response = await client.send_transaction(transfer_txn, program_derived_address)
-        print(f'>>> {response}')
+        delete_pda_txn = get_delete_pda_txn(keypair.public_key, program_keypair.public_key)
+        response = await client.send_transaction(delete_pda_txn, program_keypair)
+        print(f'>>delete_program> {response}')
 
 
 async def main(args: Namespace):
@@ -299,7 +291,7 @@ async def main(args: Namespace):
     print('-' * 120 + '\n\n')
 
     # await prepare(args.url, keypair, program_keypair)
-    await increate_counter_and_wait(args.url, keypair, program_keypair)
+    await increase_counter_and_wait(args.url, keypair, program_keypair)
     # await get_all_program_accounts(args.url, program_keypair)
 
 args = get_args()
