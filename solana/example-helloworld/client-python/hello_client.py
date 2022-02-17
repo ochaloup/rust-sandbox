@@ -137,7 +137,7 @@ def get_delete_pda_txn(public_key: PublicKey, program_key: PublicKey, recent_blo
         keys=[
             AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True),
             AccountMeta(pubkey=program_key, is_signer=True, is_writable=False),
-            AccountMeta(pubkey=public_key, is_signer=False, is_writable=False),
+            AccountMeta(pubkey=public_key, is_signer=True, is_writable=True),
         ],
         program_id=program_key,
         data=layout.DELETE_PDA_INSTRUCTION.build({})
@@ -277,7 +277,7 @@ async def delete_program_data_account(rpc_url: str, keypair:Keypair, program_key
         program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         print(f'PDA pubkey: {program_derived_address}')
         delete_pda_txn = get_delete_pda_txn(keypair.public_key, program_keypair.public_key)
-        response = await client.send_transaction(delete_pda_txn, program_keypair)
+        response = await client.send_transaction(delete_pda_txn, keypair, program_keypair)
         print(f'>>delete_program> {response}')
 
 
@@ -291,8 +291,9 @@ async def main(args: Namespace):
     print('-' * 120 + '\n\n')
 
     # await prepare(args.url, keypair, program_keypair)
-    await increase_counter_and_wait(args.url, keypair, program_keypair)
+    # await increase_counter_and_wait(args.url, keypair, program_keypair)
     # await get_all_program_accounts(args.url, program_keypair)
+    await delete_program_data_account(args.url, keypair, program_keypair)
 
 args = get_args()
 asyncio.run(main(args))

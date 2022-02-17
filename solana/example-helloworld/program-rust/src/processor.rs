@@ -40,7 +40,7 @@ impl Processor {
 
         // Get the data account
         let data_account = next_account_info(accounts_iter)?;
-        msg!("Pubkeys: {}, {}", data_account.owner, program_id);  // TODO: DELETE ME
+        msg!("Program id: {}, data account: {}", program_id, data_account.key);
         // The account must be owned by the program in order to modify its data
         if data_account.owner != program_id {
             msg!("Data account is now owned by correct program id");
