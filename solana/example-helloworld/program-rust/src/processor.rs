@@ -24,24 +24,19 @@ impl Processor {
     ) -> ProgramResult {
         let (instruction_type, _rest_data) = parse_instruction(instruction_data);
         return match instruction_type {
-            InstructionTypes::Counter => Self::process_greetings(program_id, accounts),
+            InstructionTypes::Counter => Self::process_counter(program_id, accounts),
+            InstructionTypes::DeletePda => Self::process_delete_pda(program_id, accounts),
             _ => Err(InvalidInstruction.into())
         };
     }
 
-    // Greetings
-    pub fn process_greetings(
-        program_id: &Pubkey, // Public key of the account the hello world program was loaded into
-        accounts: &[AccountInfo], // The account to say hello to
-    ) -> ProgramResult {
-        msg!("Hello World Rust program entrypoint");
-
-        // Iterating accounts is safer than indexing
+    pub fn verify_program_owner(program_id: &Pubkey, accounts: &[AccountInfo]) -> Result<(),ProgramError> {
+        // Iterating accounts (safer than indexing)
         let accounts_iter = &mut accounts.iter();
-        
-        // Get the account to say hello to
+
+        // Get the data account
         let data_account = next_account_info(accounts_iter)?;
-        msg!("Pubkeys: {}, {}", data_account.owner, program_id);
+        msg!("Pubkeys: {}, {}", data_account.owner, program_id);  // TODO: DELETE ME
         // The account must be owned by the program in order to modify its data
         if data_account.owner != program_id {
             msg!("Greeted account does not have the correct program id");
@@ -49,10 +44,22 @@ impl Processor {
         }
 
         let signer_account = next_account_info(accounts_iter)?;
+        // The owner of the data account has to sign the transaction
         if data_account.owner != signer_account.key || !signer_account.is_signer {
             msg!("Data account owner has to sign the transaction");
             return Err(ProgramError::IllegalOwner);
         }
+        Ok(())
+    }
+
+    pub fn process_counter(
+        program_id: &Pubkey, // Public key of this program
+        accounts: &[AccountInfo], // The PDA account where the data is saved
+    ) -> ProgramResult {
+        Self::verify_program_owner(program_id, accounts)?;
+
+        let accounts_iter = &mut accounts.iter();
+        let data_account = next_account_info(accounts_iter)?;
 
         // Increment and store the number of times the account has been greeted
         let mut greeting_account = ChkpCounterAccount::try_from_slice(&data_account.data.borrow())?;
@@ -72,6 +79,22 @@ impl Processor {
 
         Ok(())
     }
+
+    pub fn process_delete_pda(_program_id: &Pubkey, _accounts: &[AccountInfo]) -> ProgramResult {
+        Ok(())
+    }
+
+    // pub fn process_delete_pda() -> None {
+    //     msg!("Closing the escrow account...");
+    //     **initializers_main_account.lamports.borrow_mut() = initializers_main_account.lamports()
+    //     .checked_add(escrow_account.lamports())
+    //     .ok_or(EscrowError::AmountOverflow)?;
+    //     **escrow_account.lamports.borrow_mut() = 0;
+    //     *escrow_account.try_borrow_mut_data()? = &mut [];
+
+    //     Ok(())
+
+    // }
 }
 
 // Sanity tests
@@ -119,12 +142,12 @@ mod test {
         assert_eq!(account.counter, 0);
         assert_eq!(account.timestamp, 0);
 
-        Processor::process_greetings(&program_pubkey, &accounts).unwrap();
+        Processor::process_counter(&program_pubkey, &accounts).unwrap();
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 1);
         assert_eq!(account.timestamp, -1);
 
-        Processor::process_greetings(&program_pubkey, &accounts).unwrap();
+        Processor::process_counter(&program_pubkey, &accounts).unwrap();
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 2);
         assert_eq!(account.timestamp, -1);
