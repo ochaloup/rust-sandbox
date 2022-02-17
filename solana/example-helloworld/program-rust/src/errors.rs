@@ -7,6 +7,8 @@ pub enum ChkpCounterError {
     /// Invalid instruction
     #[error("Invalid Instruction")]
     InvalidInstruction,
+    #[error("Amount Overflow")]
+    AmountOverflow,
 }
 
 impl From<ChkpCounterError> for ProgramError {

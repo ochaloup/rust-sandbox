@@ -176,15 +176,15 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
             response = await client.request_airdrop(pubkey=keypair.public_key, lamports=requested_lamports)
             print(f'Requested to get airdrop for {requested_lamports}, result: {response}')
 
-        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
+        program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Processed)
         # print(f"PDA account json: {pda_account_json}")
         if not account_exists(pda_account_json):
-            print(f'Account {program_derived_address} DOES NOT exists')
+            print(f'Account {program_data_address} DOES NOT exists')
             create_account_instruction = create_account_with_seed(CreateAccountWithSeedParams(
                 from_pubkey=keypair.public_key,
                 base_pubkey=keypair.public_key,
-                new_account_pubkey=program_derived_address,
+                new_account_pubkey=program_data_address,
                 # seed=DERIVED_ADDRESS_SEED,
                 seed={"length": len(DERIVED_ADDRESS_SEED), "chars": DERIVED_ADDRESS_SEED},
                 lamports=rent_exemption_fee,
@@ -206,7 +206,7 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
-    print(f'pda account [{program_derived_address}]: {pda_account_json}')
+    print(f'pda account [{program_data_address}]: {pda_account_json}')
     counter_account = CounterAccount(pda_account_json)
     print(f'\nCOUNTER PREPARE {counter_account.counter}/{counter_account.timestamp}')
     return counter_account
@@ -214,7 +214,7 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
 
 async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> CounterAccount:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
-        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         txn = get_counter_txn(keypair.public_key, program_keypair.public_key)
         time_start_at = datetime.now()
         response = await client.send_transaction(txn, keypair, program_keypair)
@@ -228,7 +228,7 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
                 print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
                 break
         print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
-        pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
+        pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Processed)
 
     counter_account = CounterAccount(pda_account_json)
     print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}')
@@ -254,28 +254,31 @@ async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> Non
 # Error when sending from PDA to wallet
 # solana.rpc.core.RPCException: {'code': -32602, 'message': 'invalid transaction: Transaction failed to sanitize accounts offsets correctly'}
 # ---
-# Transfering from PDA to a wallet can be done only in smart contract
+# Transfering from program to a wallet can be done only in smart contract, the data program is owned by program and not by system 11111111111111 program
+# thus the solana_system::transfer cannot work. We need own smart contract that works with values.
 # !!!!! 1THIS DOES NOT WORK !!!!!!
-async def delete_program_data_account_WRONG(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
+async def delete_program_data_account_1(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
-        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        print(f'PDA pubkey: {program_derived_address}')
+        program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        program_data_info = await client.get_account_info(pubkey=program_data_address)
+        print(f'Transfering from: {program_data_address}, to: {keypair.public_key}; owner of data: {program_data_info["result"]["value"]["owner"]}')
+        print(f'Signing with: {keypair.public_key} + {program_keypair.public_key}')
         transfer_instruction = transfer(TransferParams(
-            from_pubkey = program_derived_address,
-            to_pubkey = program_keypair.public_key,
+            from_pubkey = program_data_address,
+            to_pubkey = keypair.public_key,
             lamports=1
         ))
         transfer_txn = Transaction(
-            fee_payer=keypair
+            fee_payer=keypair.public_key
         ).add(transfer_instruction)
-        response = await client.send_transaction(transfer_txn, program_derived_address)
+        response = await client.send_transaction(transfer_txn, keypair, program_keypair)
         print(f'>>delete_wrong> {response}')
 
 
-async def delete_program_data_account(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
+async def delete_program_data_account_2(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
-        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        print(f'PDA pubkey: {program_derived_address}')
+        program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        print(f'PDA pubkey: {program_data_address}')
         delete_pda_txn = get_delete_pda_txn(keypair.public_key, program_keypair.public_key)
         response = await client.send_transaction(delete_pda_txn, keypair, program_keypair)
         print(f'>>delete_program> {response}')
@@ -293,7 +296,7 @@ async def main(args: Namespace):
     # await prepare(args.url, keypair, program_keypair)
     # await increase_counter_and_wait(args.url, keypair, program_keypair)
     # await get_all_program_accounts(args.url, program_keypair)
-    await delete_program_data_account(args.url, keypair, program_keypair)
+    await delete_program_data_account_2(args.url, keypair, program_keypair)
 
 args = get_args()
 asyncio.run(main(args))

@@ -3,7 +3,7 @@ use solana_program::{
     entrypoint::ProgramResult,
     msg,
     system_instruction,
-    program::{invoke_signed},
+    program::{invoke_signed, invoke_unchecked, invoke},
     program_error::ProgramError,
     pubkey::Pubkey,
     sysvar::{
@@ -14,7 +14,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{
     instructions::{ChkpCounterAccount, parse_instruction, InstructionTypes},
-    errors::ChkpCounterError::{InvalidInstruction}
+    errors::ChkpCounterError::{InvalidInstruction, AmountOverflow}
 };
 
 pub struct Processor;
@@ -92,17 +92,27 @@ impl Processor {
         let program_account = next_account_info(accounts_iter)?;
         let transfer_account = next_account_info(accounts_iter)?;
 
-        let transfer_txn = system_instruction::transfer(
-            &data_account.key,
-            &transfer_account.key,
-            1,
-        );
-        invoke_signed(&transfer_txn,
-            &[
-                program_account.clone()
-            ],
-            &[&[&b"HELLOWORLD"[..]]],
-        )?;
+        msg!(">> 5. data: {}, program: {}, transfer: {}", data_account.key, program_account.key, transfer_account.key);
+        **transfer_account.try_borrow_mut_lamports()? = transfer_account
+            .lamports()
+            .checked_add(1)  // data_account.lamports()
+            .ok_or(AmountOverflow)?;
+        **data_account.try_borrow_mut_lamports()? = data_account.lamports() - 1;
+        // *escrow_account.try_borrow_mut_data()? = &mut [];
+
+        // let transfer_txn = system_instruction::transfer(
+        //     &data_account.key,
+        //     &transfer_account.key,
+        //     1,
+        // );
+        // invoke_signed(&transfer_txn,
+        //     &[
+        //         program_account.clone()
+        //     ],
+        //     &[&[ &transfer_account.key.to_bytes(), &b"HELLOWORLD"[..], &program_account.key.to_bytes() ]],
+        // )?;
+        // msg!(">> 3. {}, {}, {}", data_account.key, program_account.key, transfer_account.key);
+        // invoke(&transfer_txn, &[data_account.clone()])?;
 
 
         // invoke_signed(
