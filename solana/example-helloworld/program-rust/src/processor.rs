@@ -2,6 +2,7 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
     msg,
+    system_instruction,
     program::{invoke_signed},
     program_error::ProgramError,
     pubkey::Pubkey,
@@ -19,10 +20,12 @@ use crate::{
 pub struct Processor;
 impl Processor {
     pub fn process(
-        program_id: &Pubkey,
-        accounts: &[AccountInfo],
-        instruction_data: &[u8],
+        program_id: &Pubkey,       // Public key of this program
+        accounts: &[AccountInfo],  // The PDA account where the data is saved
+        instruction_data: &[u8],   // Data passed with the transaction
     ) -> ProgramResult {
+        Self::verify_program_owner(program_id, accounts)?;
+
         let (instruction_type, _rest_data) = parse_instruction(instruction_data);
         return match instruction_type {
             InstructionTypes::Counter => Self::process_counter(program_id, accounts),
@@ -45,7 +48,7 @@ impl Processor {
         }
 
         let signer_account = next_account_info(accounts_iter)?;
-        // The owner of the data account has to sign the transaction
+        // The owner of the data account (i.e., the most probably the program account) has to sign the transaction
         if data_account.owner != signer_account.key || !signer_account.is_signer {
             msg!("Data account owner has to sign the transaction");
             return Err(ProgramError::IllegalOwner);
@@ -54,18 +57,17 @@ impl Processor {
     }
 
     pub fn process_counter(
-        program_id: &Pubkey, // Public key of this program
-        accounts: &[AccountInfo], // The PDA account where the data is saved
+        _program_id: &Pubkey,
+        accounts: &[AccountInfo],
     ) -> ProgramResult {
         msg!("ChainKeepers counter program running");
-        Self::verify_program_owner(program_id, accounts)?;
 
         let accounts_iter = &mut accounts.iter();
         let data_account = next_account_info(accounts_iter)?;
 
-        // Increment and store the number of times the account has been greeted
-        let mut greeting_account = ChkpCounterAccount::try_from_slice(&data_account.data.borrow())?;
-        greeting_account.counter += 1;
+        // Increment and store the number of times
+        let mut counter_account = ChkpCounterAccount::try_from_slice(&data_account.data.borrow())?;
+        counter_account.counter += 1;
         let clock = Clock::get();
         let timestamp = match clock {
             Ok(clock) => clock.unix_timestamp,
@@ -74,28 +76,45 @@ impl Processor {
                 -1
             }
         };
-        greeting_account.timestamp = timestamp;
-        greeting_account.serialize(&mut &mut data_account.data.borrow_mut()[..])?;
+        counter_account.timestamp = timestamp;
+        counter_account.serialize(&mut &mut data_account.data.borrow_mut()[..])?;
 
-        msg!("Greeted {} time(s)!", greeting_account.counter);
+        msg!("Counter increased {} time(s), time: {}!", counter_account.counter, counter_account.timestamp);
 
         Ok(())
     }
 
-    pub fn process_delete_pda(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+    pub fn process_delete_pda(_program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         msg!("Closing the ChainKeepers PDA account");
-        Self::verify_program_owner(program_id, accounts)?;
 
-        invoke_signed(
-            &close_pdas_temp_acc_ix,
+        let accounts_iter = &mut accounts.iter();
+        let data_account = next_account_info(accounts_iter)?;
+        let program_account = next_account_info(accounts_iter)?;
+        let transfer_account = next_account_info(accounts_iter)?;
+
+        let transfer_txn = system_instruction::transfer(
+            &data_account.key,
+            &transfer_account.key,
+            1,
+        );
+        invoke_signed(&transfer_txn,
             &[
-                pdas_temp_token_account.clone(),
-                initializers_main_account.clone(),
-                pda_account.clone(),
-                token_program.clone(),
+                program_account.clone()
             ],
-            &[&[&b"escrow"[..], &[bump_seed]]],
+            &[&[&b"HELLOWORLD"[..]]],
         )?;
+
+
+        // invoke_signed(
+        //     &close_pdas_temp_acc_ix,
+        //     &[
+        //         pdas_temp_token_account.clone(),
+        //         initializers_main_account.clone(),
+        //         pda_account.clone(),
+        //         token_program.clone(),
+        //     ],
+        //     &[&[&b"escrow"[..], &[bump_seed]]],
+        // )?;
 
         Ok(())
     }

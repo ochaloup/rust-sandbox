@@ -27,11 +27,15 @@ class TimestampAdapter(construct.Adapter):  # i64 is signed integer as timestamp
         return datetime.timestamp(obj)
 
 
-GREETING_ACCOUNT = construct.Struct(
+COUNTER_ACCOUNT = construct.Struct(
     "counter" / U32Adapter(),
     "timestamp" / TimestampAdapter()
 )
 
 COUNTER_INSTRUCTION = construct.Struct(
     "instruction_type" / construct.Const(1, construct.BytesInteger(1, signed = False, swapped=True)),
+)
+
+DELETE_PDA_INSTRUCTION = construct.Struct(
+    "instruction_type" / construct.Const(2, construct.BytesInteger(1, signed = False, swapped=True)),
 )

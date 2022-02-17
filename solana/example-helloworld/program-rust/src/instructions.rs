@@ -9,7 +9,16 @@ pub struct ChkpCounterAccount {
 
 pub enum InstructionTypes {
     Unknown = 0,
+
+    /// Accounts expected by this instruction (2):
+    /// 0. `[writable]` program_data - PDA address where data is stored
+    /// 1. `[]` program - account owning the program_data which has to sign the transaction 
     Counter = 1,
+
+    /// Accounts expected by this instruction (3):
+    /// 0. `[writable]` program_data - PDA address where data is stored
+    /// 1. `[]` program - account owning the program_data which has to sign the transaction
+    /// 3. `[]` transfer_account - account where the SOL from program_data account will be transfered to
     DeletePda = 2
 }
 

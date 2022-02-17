@@ -83,13 +83,14 @@ class ProgramAccount:
         self.lamports: int = result['value']['lamports']
         self.executable: bool = result['value']['executable']
 
-class GreetingAccount(ProgramAccount):
+class CounterAccount(ProgramAccount):
     def __init__(self, json_data: dict) -> None:
         super().__init__(json_data)
-        if len(self.data) != layout.GREETING_ACCOUNT.sizeof():
-            raise Exception('Cannot process data from program as it is not compatible with greeting account')
-        greeting_layout = layout.GREETING_ACCOUNT.parse(self.data)
-        self.counter = greeting_layout.counter
+        if len(self.data) != layout.COUNTER_ACCOUNT.sizeof():
+            raise Exception('Cannot process data from program as it is not compatible with counter account')
+        counter_layout = layout.COUNTER_ACCOUNT.parse(self.data)
+        self.counter = counter_layout.counter
+        self.timestamp = counter_layout.timestamp
 
 def load_file(filename: str) -> bytes:
     if not os.path.isfile(filename):
@@ -114,9 +115,9 @@ def get_data_account_pubkey(public_key: PublicKey, program_key: PublicKey) -> Pu
         program_id=program_key
     )
 
-def get_greet_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
+def get_counter_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
     program_data_key = get_data_account_pubkey(public_key, program_key)
-    greet_instruction = TransactionInstruction(
+    counter_instruction = TransactionInstruction(
         keys=[
             AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True),
             AccountMeta(pubkey=program_key, is_signer=True, is_writable=False)
@@ -128,18 +129,34 @@ def get_greet_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhas
         recent_blockhash=recent_blockhash,
         nonce_info=None,
         fee_payer=public_key,
-    ).add(greet_instruction)
+    ).add(counter_instruction)
 
+def get_delete_pda_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
+    program_data_key = get_data_account_pubkey(public_key, program_key)
+    delete_pda_instruction = TransactionInstruction(
+        keys=[
+            AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True),
+            AccountMeta(pubkey=program_key, is_signer=True, is_writable=False),
+            AccountMeta(pubkey=public_key, is_signer=False, is_writable=False),
+        ],
+        program_id=program_key,
+        data=layout.DELETE_PDA_INSTRUCTION.build({})
+    )
+    return Transaction(
+        recent_blockhash=recent_blockhash,
+        nonce_info=None,
+        fee_payer=public_key,
+    ).add(delete_pda_instruction)
 
 def delta_time(time_start_at: datetime) -> float:
     time_delta: timedelta = datetime.now() - time_start_at
     return time_delta.seconds + time_delta.microseconds / 1000000
 
 async def get_rent_exemption_fee(client: AsyncClient) -> int:
-    rent_exemption_fee_json = await client.get_minimum_balance_for_rent_exemption(layout.GREETING_ACCOUNT.sizeof())
+    rent_exemption_fee_json = await client.get_minimum_balance_for_rent_exemption(layout.COUNTER_ACCOUNT.sizeof())
     return rent_exemption_fee_json['result']
 
-async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
+async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> CounterAccount:
     async with AsyncClient(rpc_url) as client:
         account_info_json = await client.get_account_info(pubkey=program_keypair.public_key)
         if not account_info_json['result']['value']['executable']:
@@ -171,7 +188,7 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Gre
                 # seed=DERIVED_ADDRESS_SEED,
                 seed={"length": len(DERIVED_ADDRESS_SEED), "chars": DERIVED_ADDRESS_SEED},
                 lamports=rent_exemption_fee,
-                space=layout.GREETING_ACCOUNT.sizeof(),
+                space=layout.COUNTER_ACCOUNT.sizeof(),
                 program_id=program_keypair.public_key
             ))
             pda_creation_txn = Transaction(
@@ -190,18 +207,18 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Gre
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
     print(f'pda account [{program_derived_address}]: {pda_account_json}')
-    greeting_account = GreetingAccount(pda_account_json)
-    print(f'\nCOUNTER PREPARE {greeting_account.counter}')
-    return greeting_account
+    counter_account = CounterAccount(pda_account_json)
+    print(f'\nCOUNTER PREPARE {counter_account.counter}/{counter_account.timestamp}')
+    return counter_account
 
 
-async def send_greeting_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
+async def increate_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> CounterAccount:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
         program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        txn = get_greet_txn(keypair.public_key, program_keypair.public_key)
+        txn = get_counter_txn(keypair.public_key, program_keypair.public_key)
         time_start_at = datetime.now()
         response = await client.send_transaction(txn, keypair, program_keypair)
-        print(f'Sending greet txn response: {response}')
+        print(f'Counter txn response on send: {response}')
         while True:
             response_txn = await client.get_transaction(response['result'])
             # print(f'DEBUG: {response_txn}')
@@ -214,8 +231,8 @@ async def send_greeting_and_wait(rpc_url: str, keypair:Keypair, program_keypair:
         print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
         pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
 
-    greeting_account = GreetingAccount(pda_account_json)
-    print(f'\nCOUNTER TXN {greeting_account.counter}')
+    counter_account = CounterAccount(pda_account_json)
+    print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account}')
 
 
 async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> None:
@@ -240,6 +257,22 @@ async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> Non
 # ---
 # Transfering from PDA to a wallet can be done only in smart contract
 # !!!!! 1THIS DOES NOT WORK !!!!!!
+async def delete_program_data_account_WRONG(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
+    async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
+        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        print(f'PDA pubkey: {program_derived_address}')
+        transfer_instruction = transfer(TransferParams(
+            from_pubkey = program_derived_address,
+            to_pubkey = program_keypair.public_key,
+            lamports=1
+        ))
+        transfer_txn = Transaction(
+            fee_payer=keypair
+        ).add(transfer_instruction)
+        response = await client.send_transaction(transfer_txn, program_derived_address)
+        print(f'>>> {response}')
+
+
 async def delete_program_data_account(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
         program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
@@ -266,7 +299,7 @@ async def main(args: Namespace):
     print('-' * 120 + '\n\n')
 
     # await prepare(args.url, keypair, program_keypair)
-    await send_greeting_and_wait(args.url, keypair, program_keypair)
+    await increate_counter_and_wait(args.url, keypair, program_keypair)
     # await get_all_program_accounts(args.url, program_keypair)
 
 args = get_args()
