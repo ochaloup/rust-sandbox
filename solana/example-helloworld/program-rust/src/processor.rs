@@ -2,23 +2,21 @@ use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint::ProgramResult,
     msg,
-    program::{invoke, invoke_signed},
     program_error::ProgramError,
-    program_pack::{IsInitialized, Pack},
     pubkey::Pubkey,
-    sysvar::{rent::Rent, Sysvar},
 };
+use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::instruction::ChkpCounterInstruction::ChkpCounterAccount;
+use crate::{instructions::ChkpCounterAccount};
 
 pub struct Processor;
 impl Processor {
     pub fn process(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
-        instruction_data: &[u8],
+        _instruction_data: &[u8],
     ) -> ProgramResult {
-        process_greetings(program_id, accounts)
+        Self::process_greetings(program_id, accounts)
     }
 
     // Greetings
@@ -62,6 +60,7 @@ mod test {
     use super::*;
     use solana_program::clock::Epoch;
     use std::mem;
+    use Processor;
 
     #[test]
     fn test_sanity() {
@@ -70,7 +69,8 @@ mod test {
         let mut lamports = 0;
         let mut data = vec![0; mem::size_of::<u32>()];
         let owner = Pubkey::default();
-        let account = AccountInfo::new(
+        let program_owner = Pubkey::default();
+        let data_account = AccountInfo::new(
             &key,
             false,
             true,
@@ -80,9 +80,21 @@ mod test {
             false,
             Epoch::default(),
         );
-        let instruction_data: Vec<u8> = Vec::new();
+        let mut lamports_program = 0;
+        let mut data_program = vec![];
+        let program_account = AccountInfo::new(
+            &owner,
+            true,
+            true,
+            &mut lamports_program,
+            &mut data_program,
+            &program_owner,
+            false,
+            Epoch::default(),
+        );
+        // let instruction_data: Vec<u8> = Vec::new();
 
-        let accounts = vec![account];
+        let accounts = vec![data_account, program_account];
 
         assert_eq!(
             ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow())
@@ -90,14 +102,14 @@ mod test {
                 .counter,
             0
         );
-        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
+        Processor::process_greetings(&program_id, &accounts).unwrap();
         assert_eq!(
             ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow())
                 .unwrap()
                 .counter,
             1
         );
-        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
+        Processor::process_greetings(&program_id, &accounts).unwrap();
         assert_eq!(
             ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow())
                 .unwrap()

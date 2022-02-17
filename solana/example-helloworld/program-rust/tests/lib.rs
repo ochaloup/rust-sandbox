@@ -1,5 +1,5 @@
 use borsh::BorshDeserialize;
-use helloworld::{process_instruction, GreetingAccount};
+use chkpcounter::{processor::Processor, instructions::ChkpCounterAccount};
 use solana_program_test::*;
 use solana_sdk::{
     account::Account,
@@ -18,7 +18,7 @@ async fn test_helloworld() {
     let mut program_test = ProgramTest::new(
         "helloworld", // Run the BPF version with `cargo test-bpf`
         program_id,
-        processor!(process_instruction), // Run the native version with `cargo test`
+        processor!(Processor::process), // Run the native version with `cargo test`
     );
     program_test.add_account(
         greeted_pubkey,
@@ -38,7 +38,7 @@ async fn test_helloworld() {
         .expect("get_account")
         .expect("greeted_account not found");
     assert_eq!(
-        GreetingAccount::try_from_slice(&greeted_account.data)
+        ChkpCounterAccount::try_from_slice(&greeted_account.data)
             .unwrap()
             .counter,
         0
@@ -63,7 +63,7 @@ async fn test_helloworld() {
         .expect("get_account")
         .expect("greeted_account not found");
     assert_eq!(
-        GreetingAccount::try_from_slice(&greeted_account.data)
+        ChkpCounterAccount::try_from_slice(&greeted_account.data)
             .unwrap()
             .counter,
         1
@@ -88,7 +88,7 @@ async fn test_helloworld() {
         .expect("get_account")
         .expect("greeted_account not found");
     assert_eq!(
-        GreetingAccount::try_from_slice(&greeted_account.data)
+        ChkpCounterAccount::try_from_slice(&greeted_account.data)
             .unwrap()
             .counter,
         2

@@ -25,6 +25,9 @@ cargo build --release  # just download dependencies and check if can be build
 cargo build-bpf --manifest-path=./Cargo.toml --bpf-out-dir=dist/program
 # test
 cargo test-bpf --manifest-path=./Cargo.toml
+# running only unit tests
+cargo test --bins
+
 # deploy
 solana program deploy dist/program/helloworld.so
 ## deployment configuration at: /home/chalda/.config/solana/cli/config.yml
