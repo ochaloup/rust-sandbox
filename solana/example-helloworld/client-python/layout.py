@@ -1,6 +1,7 @@
 import construct
 import typing
-from decimal import Decimal
+import datetime
+from decimal import Decimal, date
 
 class U32Adapter(construct.Adapter):  # u32 is unsigned 32 bit integer
     def __init__(self, size: int = 4) -> None:
@@ -13,6 +14,20 @@ class U32Adapter(construct.Adapter):  # u32 is unsigned 32 bit integer
         # Can only encode int values.
         return int(obj)
 
+
+class TimestampAdapter(construct.Adapter):  # i64 is signed integer as timestamp is saved in Solana Clock
+    def __init__(self, size: int = 8) -> None:
+        super().__init__(construct.BytesInteger(size, signed=True, swapped=True))
+
+    def _decode(self, obj: int, context: typing.Any, path: typing.Any) -> datetime.date:
+        return datetime.datetime.fromtimestamp(obj) # TODO: do I need / 1e3?
+
+    def _encode(self, obj: datetime.date, context: typing.Any, path: typing.Any) -> int:
+        # Can only encode date values!
+        return datetime.timestamp(obj)
+
+
 GREETING_ACCOUNT = construct.Struct(
-    "counter" / U32Adapter()
+    "counter" / U32Adapter(),
+    "timestamp" / TimestampAdapter()
 )

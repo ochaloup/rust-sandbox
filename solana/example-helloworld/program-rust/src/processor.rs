@@ -4,6 +4,9 @@ use solana_program::{
     msg,
     program_error::ProgramError,
     pubkey::Pubkey,
+    sysvar::{
+        clock::Clock, Sysvar,
+    },
 };
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -25,17 +28,18 @@ impl Processor {
         accounts: &[AccountInfo], // The account to say hello to
     ) -> ProgramResult {
         msg!("Hello World Rust program entrypoint");
+
         // Iterating accounts is safer than indexing
         let accounts_iter = &mut accounts.iter();
-
+        
         // Get the account to say hello to
         let data_account = next_account_info(accounts_iter)?;
+        msg!("Pubkeys: {}, {}", data_account.owner, program_id);
         // The account must be owned by the program in order to modify its data
         if data_account.owner != program_id {
             msg!("Greeted account does not have the correct program id");
             return Err(ProgramError::IncorrectProgramId);
         }
-        msg!("Hello World owner: {}, {}", data_account.owner, program_id);
 
         let signer_account = next_account_info(accounts_iter)?;
         if data_account.owner != signer_account.key || !signer_account.is_signer {
@@ -46,6 +50,15 @@ impl Processor {
         // Increment and store the number of times the account has been greeted
         let mut greeting_account = ChkpCounterAccount::try_from_slice(&data_account.data.borrow())?;
         greeting_account.counter += 1;
+        let clock = Clock::get();
+        let timestamp = match clock {
+            Ok(clock) => clock.unix_timestamp,
+            Err(err) => {
+                msg!("Error on using Sysvar Clock {}", err);
+                -1
+            }
+        };
+        greeting_account.timestamp = timestamp;
         greeting_account.serialize(&mut &mut data_account.data.borrow_mut()[..])?;
 
         msg!("Greeted {} time(s)!", greeting_account.counter);
@@ -64,26 +77,25 @@ mod test {
 
     #[test]
     fn test_sanity() {
-        let program_id = Pubkey::default();
-        let key = Pubkey::default();
+        let data_pubkey = Pubkey::new_unique();
+        let program_pubkey = Pubkey::new_unique();
         let mut lamports = 0;
-        let mut data = vec![0; mem::size_of::<u32>()];
-        let owner = Pubkey::default();
-        let program_owner = Pubkey::default();
+        let mut data = vec![0; mem::size_of::<u32>() + mem::size_of::<i64>()];
         let data_account = AccountInfo::new(
-            &key,
+            &data_pubkey,
             false,
             true,
             &mut lamports,
             &mut data,
-            &owner,
+            &program_pubkey,
             false,
             Epoch::default(),
         );
+        let program_owner = Pubkey::default();
         let mut lamports_program = 0;
         let mut data_program = vec![];
         let program_account = AccountInfo::new(
-            &owner,
+            &program_pubkey,
             true,
             true,
             &mut lamports_program,
@@ -96,25 +108,18 @@ mod test {
 
         let accounts = vec![data_account, program_account];
 
-        assert_eq!(
-            ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow())
-                .unwrap()
-                .counter,
-            0
-        );
-        Processor::process_greetings(&program_id, &accounts).unwrap();
-        assert_eq!(
-            ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow())
-                .unwrap()
-                .counter,
-            1
-        );
-        Processor::process_greetings(&program_id, &accounts).unwrap();
-        assert_eq!(
-            ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow())
-                .unwrap()
-                .counter,
-            2
-        );
+        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        assert_eq!(account.counter, 0);
+        assert_eq!(account.timestamp, 0);
+
+        Processor::process_greetings(&program_pubkey, &accounts).unwrap();
+        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        assert_eq!(account.counter, 1);
+        assert_eq!(account.timestamp, -1);
+
+        Processor::process_greetings(&program_pubkey, &accounts).unwrap();
+        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        assert_eq!(account.counter, 2);
+        assert_eq!(account.timestamp, -1);
     }
 }
