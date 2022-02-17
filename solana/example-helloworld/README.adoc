@@ -32,6 +32,9 @@ solana program deploy dist/program/helloworld.so
 
 # solana program key pair can be found at dist/program/helloworld-keypair.json
 export PROGRAM_KEYPAIR=${PWD}/dist/program/helloworld-keypair.json
+
+# NOTE:
+# when redeployed with the `deploy` command the new keypair is not generated and the program is just upgraded
 ----
 
 

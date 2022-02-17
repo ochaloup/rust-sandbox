@@ -12,11 +12,11 @@ from argparse import ArgumentParser, Namespace
 from os import environ
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.types import TxOpts
-from solana.rpc.commitment import Processed, Finalized
+from solana.rpc.commitment import Processed, Finalized, Confirmed
 from solana.keypair import Keypair
 from solana.publickey import PublicKey
 from solana.transaction import Transaction, TransactionInstruction, AccountMeta
-from solana.system_program import create_account_with_seed, CreateAccountWithSeedParams
+from solana.system_program import create_account_with_seed, transfer, CreateAccountWithSeedParams, TransferParams
 from solana.blockhash import Blockhash
 from datetime import datetime, timedelta
 
@@ -117,7 +117,10 @@ def get_data_account_pubkey(public_key: PublicKey, program_key: PublicKey) -> Pu
 def get_greet_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
     program_data_key = get_data_account_pubkey(public_key, program_key)
     greet_instruction = TransactionInstruction(
-        keys=[AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True)],
+        keys=[
+            AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True),
+            AccountMeta(pubkey=program_key, is_signer=True, is_writable=False)
+        ],
         program_id=program_key,
         data=b''  # empty data, the counter adds on its own
     )
@@ -132,8 +135,12 @@ def delta_time(time_start_at: datetime) -> float:
     time_delta: timedelta = datetime.now() - time_start_at
     return time_delta.seconds + time_delta.microseconds / 1000000
 
-async def prepare(keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
-    async with AsyncClient(args.url) as client:
+async def get_rent_exemption_fee(client: AsyncClient) -> int:
+    rent_exemption_fee_json = await client.get_minimum_balance_for_rent_exemption(layout.GREETING_ACCOUNT.sizeof())
+    return rent_exemption_fee_json['result']
+
+async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
+    async with AsyncClient(rpc_url) as client:
         account_info_json = await client.get_account_info(pubkey=program_keypair.public_key)
         if not account_info_json['result']['value']['executable']:
             raise ValueError(f'Expected the account {program_keypair.public_key} is an executable program but it is not, {account_info_json}')
@@ -145,10 +152,8 @@ async def prepare(keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
         balance_json = await client.get_balance(pubkey=keypair.public_key)
         balance:int = balance_json['result']['value']
 
-        rent_exemption_fee_json = await client.get_minimum_balance_for_rent_exemption(layout.GREETING_ACCOUNT.sizeof())
-        rent_exemption_fee = rent_exemption_fee_json['result']
-
         # account balance is under rent for data account and price for sending a transaction
+        rent_exemption_fee = await get_rent_exemption_fee(client)
         if balance < rent_exemption_fee + lamport_per_signature:
             requested_lamports:int = rent_exemption_fee+lamport_per_signature
             response = await client.request_airdrop(pubkey=keypair.public_key, lamports=requested_lamports)
@@ -191,18 +196,22 @@ async def prepare(keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
     return greeting_account
 
 
-async def send_greeting_and_wait(keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
-    async with AsyncClient(endpoint = args.url, commitment=Processed) as client:
+async def send_greeting_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> GreetingAccount:
+    async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
         program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         txn = get_greet_txn(keypair.public_key, program_keypair.public_key)
-        response = await client.send_transaction(txn, keypair)
-        print(f'Sending greet txn response: {response}')
         time_start_at = datetime.now()
-        while not (await client.get_transaction(response['result']))['result']:
+        response = await client.send_transaction(txn, keypair, program_keypair)
+        print(f'Sending greet txn response: {response}')
+        while True:
+            response_txn = await client.get_transaction(response['result'])
+            # print(f'DEBUG: {response_txn}')
+            if 'result' in response_txn and response_txn['result']:
+                break  # the transaction was found
             if delta_time(time_start_at) > 15:
                 print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
                 break
-            sleep(0.2)
+            sleep(0.2)  # TODO: delete me
         print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
         pda_account_json = await client.get_account_info(pubkey=program_derived_address, commitment=Processed)
 
@@ -210,15 +219,56 @@ async def send_greeting_and_wait(keypair:Keypair, program_keypair:Keypair) -> Gr
     print(f'\nCOUNTER TXN {greeting_account.counter}')
 
 
+async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> None:
+    async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
+        program_accounts = await client.get_program_accounts(program_keypair.public_key)
+        program_accounts_info = []
+        if 'result' in program_accounts:
+            for program_account in program_accounts['result']:
+                program_account_pubkey = program_account['pubkey']
+                program_account_info = await client.get_account_info(pubkey=program_account_pubkey)
+                program_accounts_info.append(program_account_info)
+        print(f'Program accounts:\n{program_accounts}\nInfos: {program_accounts_info}')
+
+
+# removing the account means to take off out all the Solana balance, the account will be purged by validator
+## 
+# Error when sending from user wallet to a executable account
+# solana.rpc.core.RPCException: {'code': -32002, 'message': 'Transaction simulation failed: Transaction loads a writable account that cannot be written', 'data': {'accounts': None, 'err': 'InvalidWritableAccount', 'logs': [], 'unitsConsumed': 0}}
+# ---
+# Error when sending from PDA to wallet
+# solana.rpc.core.RPCException: {'code': -32602, 'message': 'invalid transaction: Transaction failed to sanitize accounts offsets correctly'}
+# ---
+# Transfering from PDA to a wallet can be done only in smart contract
+# !!!!! 1THIS DOES NOT WORK !!!!!!
+async def delete_program_data_account(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
+    async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
+        program_derived_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        print(f'PDA pubkey: {program_derived_address}')
+        transfer_instruction = transfer(TransferParams(
+            from_pubkey = program_derived_address,
+            to_pubkey = program_keypair.public_key,
+            lamports=1
+        ))
+        transfer_txn = Transaction(
+            fee_payer=keypair
+        ).add(transfer_instruction)
+        response = await client.send_transaction(transfer_txn, program_derived_address)
+        print(f'>>> {response}')
+
+
 async def main(args: Namespace):
     # keypair_file = Path(args.keypair)
     keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
     # program_keypair_file = Path(args.program_keypair)
     program_keypair:Keypair = Keypair.from_secret_key(load_file(args.program_keypair))
+    print('-' * 120)
+    print(f'User pubkey: "{keypair.public_key}, program key: {program_keypair.public_key}')
+    print('-' * 120 + '\n\n')
 
-    await prepare(keypair, program_keypair)
-
-    await send_greeting_and_wait(keypair, program_keypair)
+    # await prepare(args.url, keypair, program_keypair)
+    await send_greeting_and_wait(args.url, keypair, program_keypair)
+    # await get_all_program_accounts(args.url, program_keypair)
 
 args = get_args()
 asyncio.run(main(args))
