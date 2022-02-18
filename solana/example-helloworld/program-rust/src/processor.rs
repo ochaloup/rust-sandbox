@@ -64,9 +64,6 @@ impl Processor {
         let accounts_iter = &mut accounts.iter();
         let data_account = next_account_info(accounts_iter)?;
 
-        // Increment and store the number of times
-        let mut counter_account = ChkpCounterAccount::try_from_slice(&data_account.data.borrow())?;
-        counter_account.counter += 1;
         let clock = Clock::get();
         let timestamp = match clock {
             Ok(clock) => clock.unix_timestamp,
@@ -78,14 +75,17 @@ impl Processor {
         if instruction_data.len() != 8 { // expected i64 data here
             return Err(WrongCounterClientTimestamp.into())
         }
-        counter_account.timestamp = timestamp;
-        counter_account.serialize(&mut &mut data_account.data.borrow_mut()[..])?;
         let timestamp_data_result = instruction_data.try_into();
         let timestamp_data = match timestamp_data_result {
             Err(_) => return Err(WrongCounterClientTimestamp.into()),
             Ok(data) => data
         };
+
+        let mut counter_account = ChkpCounterAccount::try_from_slice(&data_account.data.borrow())?;
+        counter_account.counter += 1;
         counter_account.client_timestamp = i64::from_le_bytes(timestamp_data); // all encoding is little endian
+        counter_account.timestamp = timestamp;
+        counter_account.serialize(&mut &mut data_account.data.borrow_mut()[..])?;
 
         msg!("Counter increased {} time(s), date: {}, client date: {}", 
             counter_account.counter, counter_account.timestamp, counter_account.client_timestamp);

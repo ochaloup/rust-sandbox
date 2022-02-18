@@ -3,6 +3,8 @@ import base64
 import json
 import datetime
 
+from tomlkit import date
+
 import layout
 import os
 
@@ -89,6 +91,7 @@ class CounterAccount(ProgramAccount):
         counter_layout = layout.COUNTER_ACCOUNT.parse(self.data)
         self.counter = counter_layout.counter
         self.timestamp = counter_layout.timestamp
+        self.client_timestamp = counter_layout.client_timestamp
 
 def load_file(filename: str) -> bytes:
     if not os.path.isfile(filename):
@@ -113,7 +116,12 @@ def get_data_account_pubkey(public_key: PublicKey, program_key: PublicKey) -> Pu
         program_id=program_key
     )
 
-def get_counter_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
+def get_counter_txn(
+    public_key: PublicKey,
+    program_key: PublicKey,
+    client_time: date = datetime.utcnow(),
+    recent_blockhash:Blockhash = None
+) -> Transaction:
     program_data_key = get_data_account_pubkey(public_key, program_key)
     counter_instruction = TransactionInstruction(
         keys=[
@@ -121,7 +129,7 @@ def get_counter_txn(public_key: PublicKey, program_key: PublicKey, recent_blockh
             AccountMeta(pubkey=program_key, is_signer=True, is_writable=False)
         ],
         program_id=program_key,
-        data=layout.COUNTER_INSTRUCTION.build({"client_timestamp": datetime.datetime.utcnow()})
+        data=layout.COUNTER_INSTRUCTION.build({"client_timestamp": client_time})
     )
     return Transaction(
         recent_blockhash=recent_blockhash,
@@ -200,13 +208,15 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
                 pda_creation_txn, keypair
             )
             print(f'Create PDA account txn response: {response}')
+            while not account_exists(pda_account_json):
+                pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
 
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
     print(f'pda account [{program_data_address}]: {pda_account_json}')
     counter_account = CounterAccount(pda_account_json)
-    print(f'\nCOUNTER PREPARE {counter_account.counter}/{counter_account.timestamp}')
+    print(f'COUNTER PREPARE {counter_account.counter}/{counter_account.timestamp}')
     return counter_account
 
 
@@ -229,7 +239,7 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
         pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
 
     counter_account = CounterAccount(pda_account_json)
-    print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}')
+    print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}/{counter_account.client_timestamp}')
 
 
 async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> None:
@@ -292,9 +302,9 @@ async def main(args: Namespace):
     print('-' * 120 + '\n\n')
 
     # await prepare(args.url, keypair, program_keypair)
-    # await increase_counter_and_wait(args.url, keypair, program_keypair)
+    await increase_counter_and_wait(args.url, keypair, program_keypair)
     # await get_all_program_accounts(args.url, program_keypair)
-    await delete_program_data_account_2(args.url, keypair, program_keypair)
+    # await delete_program_data_account_2(args.url, keypair, program_keypair)
 
 args = get_args()
 asyncio.run(main(args))

@@ -19,7 +19,7 @@ class TimestampAdapter(construct.Adapter):  # i64 is signed integer as timestamp
         super().__init__(construct.BytesInteger(size, signed=True, swapped=True))
 
     def _decode(self, obj: int, context: typing.Any, path: typing.Any) -> datetime.date:
-        return datetime.datetime.fromtimestamp(obj, tz=datetime.timezone.utc)
+        return datetime.datetime.fromtimestamp(obj)
 
     def _encode(self, obj: datetime.date, context: typing.Any, path: typing.Any) -> int:
         return int(obj.timestamp())
