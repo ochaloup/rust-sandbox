@@ -7,6 +7,8 @@ pub enum ChkpCounterError {
     /// Invalid instruction
     #[error("Invalid Instruction")]
     InvalidInstruction,
+    #[error("Wrong Counter Client Timestamp data")]
+    WrongCounterClientTimestamp,
     #[error("Amount Overflow")]
     AmountOverflow,
 }

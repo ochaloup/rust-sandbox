@@ -1,9 +1,7 @@
 import asyncio
 import base64
 import json
-from time import sleep
-
-from tomlkit import key
+import datetime
 
 import layout
 import os
@@ -123,7 +121,7 @@ def get_counter_txn(public_key: PublicKey, program_key: PublicKey, recent_blockh
             AccountMeta(pubkey=program_key, is_signer=True, is_writable=False)
         ],
         program_id=program_key,
-        data=layout.COUNTER_INSTRUCTION.build({})
+        data=layout.COUNTER_INSTRUCTION.build({"client_timestamp": datetime.datetime.utcnow()})
     )
     return Transaction(
         recent_blockhash=recent_blockhash,

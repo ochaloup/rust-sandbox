@@ -12,7 +12,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{
     instructions::{ChkpCounterAccount, parse_instruction, InstructionTypes},
-    errors::ChkpCounterError::{InvalidInstruction, AmountOverflow}
+    errors::ChkpCounterError::{InvalidInstruction, AmountOverflow, WrongCounterClientTimestamp}
 };
 
 pub struct Processor;
@@ -24,9 +24,9 @@ impl Processor {
     ) -> ProgramResult {
         Self::verify_program_owner(program_id, accounts)?;
 
-        let (instruction_type, _rest_data) = parse_instruction(instruction_data);
+        let (instruction_type, rest_data) = parse_instruction(instruction_data);
         return match instruction_type {
-            InstructionTypes::Counter => Self::process_counter(program_id, accounts),
+            InstructionTypes::Counter => Self::process_counter(program_id, accounts, rest_data),
             InstructionTypes::DeletePda => Self::process_delete_data_account(accounts),
             _ => Err(InvalidInstruction.into())
         };
@@ -57,6 +57,7 @@ impl Processor {
     pub fn process_counter(
         _program_id: &Pubkey,
         accounts: &[AccountInfo],
+        instruction_data: &[u8],
     ) -> ProgramResult {
         msg!("ChainKeepers counter program running");
 
@@ -74,10 +75,20 @@ impl Processor {
                 -1
             }
         };
+        if instruction_data.len() != 8 { // expected i64 data here
+            return Err(WrongCounterClientTimestamp.into())
+        }
         counter_account.timestamp = timestamp;
         counter_account.serialize(&mut &mut data_account.data.borrow_mut()[..])?;
+        let timestamp_data_result = instruction_data.try_into();
+        let timestamp_data = match timestamp_data_result {
+            Err(_) => return Err(WrongCounterClientTimestamp.into()),
+            Ok(data) => data
+        };
+        counter_account.client_timestamp = i64::from_le_bytes(timestamp_data); // all encoding is little endian
 
-        msg!("Counter increased {} time(s), date: {}!", counter_account.counter, counter_account.timestamp);
+        msg!("Counter increased {} time(s), date: {}, client date: {}", 
+            counter_account.counter, counter_account.timestamp, counter_account.client_timestamp);
 
         Ok(())
     }
@@ -138,6 +149,7 @@ mod test {
             false,
             Epoch::default(),
         );
+        let timestamp_data = vec![4,0,0,0,0,0,0,0]; // little endian
 
         let accounts = vec![data_account.clone(), program_account.clone()];
 
@@ -145,12 +157,12 @@ mod test {
         assert_eq!(account.counter, 0);
         assert_eq!(account.timestamp, 0);
 
-        Processor::process_counter(&program_pubkey, &accounts).unwrap();
+        Processor::process_counter(&program_pubkey, &accounts, &timestamp_data).unwrap();
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 1);
         assert_eq!(account.timestamp, -1);
 
-        Processor::process_counter(&program_pubkey, &accounts).unwrap();
+        Processor::process_counter(&program_pubkey, &accounts, &timestamp_data).unwrap();
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 2);
         assert_eq!(account.timestamp, -1);
@@ -160,7 +172,8 @@ mod test {
         let error = Processor::process(&program_pubkey, &accounts, &instruction_data);
         assert_eq!(error, Err(InvalidInstruction.into()));
 
-        let instruction_data = vec![1];
+        let mut instruction_data = vec![1];
+        instruction_data.extend(timestamp_data);
         Processor::process(&program_pubkey, &accounts, &instruction_data).unwrap();
         let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 3);

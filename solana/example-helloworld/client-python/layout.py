@@ -11,7 +11,6 @@ class U32Adapter(construct.Adapter):  # u32 is unsigned 32 bit integer
         return Decimal(obj)
 
     def _encode(self, obj: Decimal, context: typing.Any, path: typing.Any) -> int:
-        # Can only encode int values.
         return int(obj)
 
 
@@ -20,20 +19,21 @@ class TimestampAdapter(construct.Adapter):  # i64 is signed integer as timestamp
         super().__init__(construct.BytesInteger(size, signed=True, swapped=True))
 
     def _decode(self, obj: int, context: typing.Any, path: typing.Any) -> datetime.date:
-        return datetime.datetime.fromtimestamp(obj)
+        return datetime.datetime.fromtimestamp(obj, tz=datetime.timezone.utc)
 
     def _encode(self, obj: datetime.date, context: typing.Any, path: typing.Any) -> int:
-        # Can only encode date values!
-        return datetime.timestamp(obj)
+        return int(obj.timestamp())
 
 
 COUNTER_ACCOUNT = construct.Struct(
     "counter" / U32Adapter(),
-    "timestamp" / TimestampAdapter()
+    "timestamp" / TimestampAdapter(),
+    "client_timestamp" / TimestampAdapter()
 )
 
 COUNTER_INSTRUCTION = construct.Struct(
     "instruction_type" / construct.Const(1, construct.BytesInteger(1, signed = False, swapped=True)),
+    "client_timestamp" / TimestampAdapter()
 )
 
 DELETE_PDA_INSTRUCTION = construct.Struct(
