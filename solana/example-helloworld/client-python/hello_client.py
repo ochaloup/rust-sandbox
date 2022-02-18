@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import json
 import datetime
 import aiohttp
+import sys
 
-from tomlkit import date
-
+from numpy import record
 import layout
 import os
 
@@ -19,7 +21,7 @@ from solana.publickey import PublicKey
 from solana.transaction import Transaction, TransactionInstruction, AccountMeta
 from solana.system_program import create_account_with_seed, transfer, CreateAccountWithSeedParams, TransferParams
 from solana.blockhash import Blockhash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 DERIVED_ADDRESS_SEED = 'HELLOWORLD'
 
@@ -101,6 +103,60 @@ class CounterAccount(ProgramAccount):
         self.timestamp = counter_layout.timestamp
         self.client_timestamp = counter_layout.client_timestamp
 
+
+class TransactionProcessingData:
+    def __init__(self, client_time, provider,
+            started_at = None,
+            finished_at = None,
+            txn_id = None,
+            ws_time = None,
+            blockchain_time = None,
+            blockchain_counter = None):
+        self.processing_data_updated: date = datetime.utcnow()
+        # identity definition
+        self.client_time: date = client_time
+        self.provider: str = provider
+        # transfer data
+        self.started_at: date = started_at
+        self.finished_at: date = finished_at
+        self.txn_id: str = txn_id
+        self.blockchain_time = blockchain_time
+        self.blockchain_counter = blockchain_counter
+        self.ws_time = ws_time
+
+    def id(self) -> str:
+        return str(self.client_time.timestamp()) + self.provider
+
+    def merge(self, new_data: TransactionProcessingData) -> None:
+        if new_data != self:
+            print(f'Cannot merge {new_data} with {self} as they are not identical to provider and client_time')
+        self.processing_data_updated = datetime.utcnow()
+        if new_data.started_at:
+            self.started_at = new_data.started_at
+        if new_data.finished_at:
+            self.started_at = new_data.finished_at
+        if new_data.txn_id:
+            self.started_at = new_data.txn_id
+        if new_data.blockchain_time:
+            self.blockchain_time = new_data.blockchain_time
+        if new_data.blockchain_counter:
+            self.blockchain_counter = new_data.blockchain_counter
+        if new_data.ws_time:
+            self.ws_time = new_data.ws_time
+
+    # we define the equality based on the client_time which serves as a client_id
+    # plus provider which is different to different subscriptions
+    def __eq__(self, other: TransactionProcessingData):
+        return self.client_time == other.client_time and self.provider == other.provider
+
+    def __str__ (self):
+        return (f'TransactionProcessingData(processing_data_update={self.processing_data_updated},'
+            f' client_time={self.client_time}, provider={self.provider}, '
+            f'started_at={self.started_at}, finished_at={self.finished_at}, txn_id={self.txn_id}, '
+            f'blockchain_time={self.blockchain_time}, blockchain_counter={self.blockchain_counter}'
+        )
+
+
 def load_file(filename: str) -> bytes:
     if not os.path.isfile(filename):
         raise ValueError(f"File with key '{filename}' does not exist")
@@ -162,8 +218,8 @@ def get_delete_pda_txn(public_key: PublicKey, program_key: PublicKey, recent_blo
         fee_payer=public_key,
     ).add(delete_pda_instruction)
 
-def delta_time(time_start_at: datetime) -> float:
-    time_delta: timedelta = datetime.now() - time_start_at
+def delta_time(time_start_at: datetime, time_finished_at = datetime.utcnow()) -> float:
+    time_delta: timedelta = time_finished_at - time_start_at
     return time_delta.seconds + time_delta.microseconds / 1000000
 
 async def get_rent_exemption_fee(client: AsyncClient) -> int:
@@ -228,26 +284,44 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
     return counter_account
 
 
-async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> CounterAccount:
+async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> TransactionProcessingData:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
-        program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        txn = get_counter_txn(keypair.public_key, program_keypair.public_key)
-        time_start_at = datetime.now()
+        # program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        provider: str = "onering"
+        start_at: date = datetime.utcnow()
+        txn = get_counter_txn(
+            public_key = keypair.public_key,
+            program_key = program_keypair.public_key,
+            client_time = start_at
+        )
         response = await client.send_transaction(txn, keypair, program_keypair)
-        print(f'Counter txn response on send: {response}')
+        print(f'Counter txn response on send: {response}')  # TODO: delete me
+        if 'result' not in response:
+            print(f'ERROR: cannot get information about sent transaction: {response}')
+            return None
+        txn_id = response['result']
+        finished_at: date = datetime.max
         while True:
-            response_txn = await client.get_transaction(response['result'])
-            # print(f'DEBUG: {response_txn}')
+            response_txn = await client.get_transaction(txn_id)
             if 'result' in response_txn and response_txn['result']:
+                finished_at = datetime.utcnow()
+                print(f"DEBUG: {response_txn['result']}")  # TODO: delete me
                 break  # the transaction was found
-            if delta_time(time_start_at) > 15:
-                print(f'Waiting for 15 seconds to get information about txn response["result"] to be written, BUT not yet!')
+            if delta_time(start_at) > 30:  # TODO: parametrize me
+                print(f'Waiting for 30 seconds to get information about txn response["result"] to be written, BUT not yet!')
                 break
-        print(f'Transaction {response["result"]} takes {delta_time(time_start_at)} seconds to be written to blockchain')
-        pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
-
-    counter_account = CounterAccount(pda_account_json)
-    print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}/{counter_account.client_timestamp}')
+        print(f'Transaction {response["result"]} takes {delta_time(start_at, finished_at)} seconds to be written to blockchain')
+        return TransactionProcessingData(
+            client_id=start_at,  # we use the client time as client id
+            provider=provider,
+            txn_id=txn_id,
+            started_at=start_at,
+            finished_at=finished_at
+        )
+        
+    # pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
+    # counter_account = CounterAccount(pda_account_json)
+    # print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}/{counter_account.client_timestamp}')
 
 
 async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> None:
@@ -311,21 +385,39 @@ def solana_account_ws_subscription(address: str, commitment: str = str(Processed
 async def work_with_ws(args: Namespace):
     keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
     program_keypair:Keypair = Keypair.from_secret_key(load_file(args.program_keypair))
+    provider: str = "onering"
 
     async with aiohttp.ClientSession().ws_connect(args.ws) as ws:
         program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         await ws.send_json(
             solana_account_ws_subscription(program_data_address)
         )
-        response = await ws.receive(timeout=15)
+        response = await ws.receive(timeout=30)
         print(f'ws subscription: {response}')
         async for msg in ws:
             data = msg.json()
             print(f"---->  {data['params']}")
             counter_account = CounterAccount(data['params'])
-            print(f'>>> {counter_account.client_timestamp}')
+            # print(f'>>> {counter_account.client_timestamp}')
+            txn_data = TransactionProcessingData(
+                client_time=counter_account.client_timestamp,
+                provider=provider,
+                blockchain_time=counter_account.timestamp,
+                blockchain_counter=counter_account.counter,
+                ws_time = datetime.utcnow()
+            )
+            update_in_shared_dict(shared_processing_data, txn_data)
 
-async def work_with_counter(args: Namespace):
+def update_in_shared_dict(shared_processing_data: dict, record: TransactionProcessingData):
+    saved_record: TransactionProcessingData = shared_processing_data[record.id()]
+    if saved_record:
+        saved_record.merge(record)
+        shared_processing_data[record.id()] = saved_record
+    else:
+        shared_processing_data[record.id()] = record
+
+
+async def work_with_counter(args: Namespace, shared_processing_data: dict):
     # keypair_file = Path(args.keypair)
     keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
     # program_keypair_file = Path(args.program_keypair)
@@ -337,15 +429,34 @@ async def work_with_counter(args: Namespace):
     # await prepare(args.url, keypair, program_keypair)
     for i in range(1,20):
         print(f'LOOP {i}')
-        await increase_counter_and_wait(args.url, keypair, program_keypair)
-        asyncio.sleep(15)
+        txn_data = await increase_counter_and_wait(args.url, keypair, program_keypair)
+        update_in_shared_dict(shared_processing_data, txn_data)
+        asyncio.sleep(30)
     # await get_all_program_accounts(args.url, program_keypair)
     # await delete_program_data_account_2(args.url, keypair, program_keypair)
+
+async def update_db(args: Namespace, shared_processing_data: dict):
+    while True:
+        record: TransactionProcessingData
+        for id, record in shared_processing_data.items():
+            if record.started_at and record.blockchain_counter:
+                print(f'Transaction "{record.txn_id}" got to blockchain after {delta_time(record.started_at, record.blockchain_time)}, '
+                    f'txn was processed by validators after {delta_time(record.started_at, record.finished_at)}, '
+                    f'received by WS after {delta_time(record.started_at, record.ws_time)}'
+                )
+            if delta_time(record.processing_data_updated) > 60:
+                print(f'ERROR: removing record {record} from the list as timeouted after 60 second')
+                shared_processing_data.pop(record)
+        asyncio.sleep(10)
+
+
 
 args = get_args()
 
 # asyncio.run(main(args))
+shared_processing_data: dict = {}  # key(provider+client_id) -> TransactionProcessingData
 loop = asyncio.get_event_loop()
-loop.create_task(work_with_counter(args))
-loop.create_task(work_with_ws(args))
+loop.create_task(work_with_counter(args, shared_processing_data))
+loop.create_task(work_with_ws(args, shared_processing_data))
+loop.create_task(update_db(args, shared_processing_data))
 loop.run_forever()
