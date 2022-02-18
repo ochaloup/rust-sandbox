@@ -1,1 +1,2 @@
 solana==0.21.0
+aiohttp==3.8.1

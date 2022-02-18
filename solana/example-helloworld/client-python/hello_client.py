@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import datetime
+import aiohttp
 
 from tomlkit import date
 
@@ -37,6 +38,13 @@ def get_args() -> Namespace:
         type=str,
         help="RPC connection URL (consider https://api.mainnet-beta.solana.com/ or https://mango.rpcpool.com/946ef7337da3f5b8d3e4a34e7f88)",
         default="http://127.0.0.1:8899"
+    )
+    parser.add_argument(
+        "-w",
+        "--ws",
+        type=str,
+        help="RPC WS connection (consider wss://api.mainnet-beta.solana.com/ or wss://mango.rpcpool.com/946ef7337da3f5b8d3e4a34e7f88)",
+        default="ws://localhost:8900"
     )
     parser.add_argument(
         "-p",
@@ -76,7 +84,7 @@ class ProgramAccount:
         result = json_data['result']
         if result['value']['executable']:
             raise ValueError(f'Expected the account is an data account but it is executable, {json_data}')
-        self.id: int = json_data['id']
+        self.id: int = json_data['id'] if 'id' in json_data else json_data['subscription']
         self.latest_slot: int = result['context']['slot']
         # print(f"we have some base64 data here: {result['value']['data'][0]}")
         self.data: bytes = base64.b64decode(result['value']['data'][0])  # expected to be base64
@@ -291,8 +299,33 @@ async def delete_program_data_account_2(rpc_url: str, keypair:Keypair, program_k
         response = await client.send_transaction(delete_pda_txn, keypair, program_keypair)
         print(f'>>delete_program> {response}')
 
+def solana_account_ws_subscription(address: str, commitment: str = str(Processed)) -> dict:
+    subscription_id: int = datetime.now().timestamp()
+    return {
+        "jsonrpc": "2.0",
+        "id": str(subscription_id),
+        "method": "accountSubscribe",
+        "params": [str(address), {"encoding": "base64", "commitment": str(commitment)}],
+    }
 
-async def main(args: Namespace):
+async def work_with_ws(args: Namespace):
+    keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
+    program_keypair:Keypair = Keypair.from_secret_key(load_file(args.program_keypair))
+
+    async with aiohttp.ClientSession().ws_connect(args.ws) as ws:
+        program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
+        await ws.send_json(
+            solana_account_ws_subscription(program_data_address)
+        )
+        response = await ws.receive(timeout=15)
+        print(f'ws subscription: {response}')
+        async for msg in ws:
+            data = msg.json()
+            print(f"---->  {data['params']}")
+            counter_account = CounterAccount(data['params'])
+            print(f'>>> {counter_account.client_timestamp}')
+
+async def work_with_counter(args: Namespace):
     # keypair_file = Path(args.keypair)
     keypair:Keypair = Keypair.from_secret_key(load_file(args.keypair))
     # program_keypair_file = Path(args.program_keypair)
@@ -302,9 +335,17 @@ async def main(args: Namespace):
     print('-' * 120 + '\n\n')
 
     # await prepare(args.url, keypair, program_keypair)
-    await increase_counter_and_wait(args.url, keypair, program_keypair)
+    for i in range(1,20):
+        print(f'LOOP {i}')
+        await increase_counter_and_wait(args.url, keypair, program_keypair)
+        asyncio.sleep(15)
     # await get_all_program_accounts(args.url, program_keypair)
     # await delete_program_data_account_2(args.url, keypair, program_keypair)
 
 args = get_args()
-asyncio.run(main(args))
+
+# asyncio.run(main(args))
+loop = asyncio.get_event_loop()
+loop.create_task(work_with_counter(args))
+loop.create_task(work_with_ws(args))
+loop.run_forever()
