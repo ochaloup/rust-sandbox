@@ -19,9 +19,10 @@ use {
 
 #[derive(Deserialize, Debug)]
 pub struct StakedNodesOverrides {
-    pub staked_map_ip: HashMap<IpAddr, u64>,
+    pub staked_map_ip: Option<HashMap<IpAddr, u64>>,
+    #[serde(default)]
     #[serde(deserialize_with = "simplyfy_deserialize_map")]
-    pub staked_map_id: HashMap<Pubkey, u64>,
+    pub staked_map_id: Option<HashMap<Pubkey, u64>>,
 }
 
 fn deserialize_full_visitor<'de, D, K, V>(deserializer: D) -> Result<HashMap<K,V>, D::Error>
@@ -99,7 +100,7 @@ where
     Ok(T::from_iter(container_typed.into_iter()))
 }
 
-pub fn simplyfy_deserialize_map<'de, D>(des: D) -> Result<HashMap<Pubkey,u64>, D::Error>
+pub fn simplyfy_deserialize_map<'de, D>(des: D) -> Result<Option<HashMap<Pubkey,u64>>, D::Error>
     where D: Deserializer<'de> {
     let container: HashMap<&str,u64> = serde::Deserialize::deserialize(des)?;
     let mut container_typed: HashMap<Pubkey,u64> = HashMap::new();
@@ -109,7 +110,7 @@ pub fn simplyfy_deserialize_map<'de, D>(des: D) -> Result<HashMap<Pubkey,u64>, D
         })?;
         container_typed.insert(typed_key, *value);
     }
-    Ok(container_typed)
+    Ok(Some(container_typed))
 }
 
 fn main() {

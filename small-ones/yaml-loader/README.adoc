@@ -18,3 +18,22 @@ EOF
 
 ./target/debug/yaml-loader /tmp/data.yaml
 ----
+
+== Notes on Yaml format
+
+The `data.yaml` that is optional could be defined with only one item or none of them
+
+[source,yaml]
+----
+staked_map_ip:
+  1.2.3.4: 3333333
+----
+
+When the data format does not permit optional items but we need to define an empty map
+
+[source,yaml]
+----
+staked_map_ip:
+  1.2.3.4: 3333333
+staked_map_id: {}
+----
