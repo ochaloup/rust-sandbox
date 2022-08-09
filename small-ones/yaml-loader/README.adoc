@@ -1,0 +1,20 @@
+= Serde Yaml loader
+
+Testing work with Serde and Yaml deserializer.
+
+Run as
+
+[source,sh]
+----
+cargo build
+
+cat <<EOF >> /tmp/data.yaml
+staked_map_ip:
+  1.1.1.1: 1000000000000000
+  2.2.2.2: 4000000000000000
+staked_map_id:
+  CuaGcFuVzRbTcpucmhgVyHdeGZSHxpDdpnUia3kJ6LNe: 3333333333
+EOF
+
+./target/debug/yaml-loader /tmp/data.yaml
+----
