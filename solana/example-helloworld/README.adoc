@@ -10,10 +10,10 @@ https://github.com/solana-labs/example-helloworld
 ----
 solana config set --url localhost
 solana-keygen new --force
-# Wrote new keypair to /home/chalda/.config/solana/id.json
+# Wrote new keypair to ~/.config/solana/id.json
 
 # to show the public key
-solana-keygen pubkey /home/chalda/.config/solana/id.json
+solana-keygen pubkey ~/.config/solana/id.json
 
 # start test validator and deploy program
 solana-test-validator
@@ -25,17 +25,16 @@ cargo build --release  # just download dependencies and check if can be build
 cargo build-bpf --manifest-path=./Cargo.toml --bpf-out-dir=dist/program
 # test the unit tests and tests directory with Solana runtime switched on
 RUST_BACKTRACE=full cargo test-bpf
-# running just unit tests where Solana funtime is not available (e.g. sysvar is not working!)
+# running just unit tests where Solana runtime is not available (e.g. sysvar is not working!)
 RUST_BACKTRACE=full cargo test --lib
 
 
 # deploy
-solana program deploy dist/program/helloworld.so
-## deployment configuration at: /home/chalda/.config/solana/cli/config.yml
+solana program deploy dist/program/testcounter.so
+## deployment configuration at: ~/.config/solana/cli/config.yml
 ## https://explorer.solana.com can be switched to http://localhost:8899 and program id (account) can be checked
 
-# solana program key pair can be found at dist/program/helloworld-keypair.json
-export PROGRAM_KEYPAIR=${PWD}/dist/program/helloworld-keypair.json
+export PROGRAM_KEYPAIR=${PWD}/dist/program/testcounter-keypair.json
 
 # NOTE:
 # when redeployed with the `deploy` command the new keypair is not generated and the program is just upgraded
@@ -49,5 +48,5 @@ export PROGRAM_KEYPAIR=${PWD}/dist/program/helloworld-keypair.json
 cd client-python
 pip install -r requirements.txt
 
-python3 hello_client.py -p ../program-rust/dist/program/helloworld-keypair.json
+python3 hello_client.py -p ../program-rust/dist/program/testcounter-keypair.json
 ----

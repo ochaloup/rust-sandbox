@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import datetime
+from typing import Final
 import aiohttp
 import sys
 
@@ -54,6 +55,20 @@ def get_args() -> Namespace:
         type=str,
         help="Path to file with program keypair",
         default=f"{environ['PROGRAM_KEYPAIR'] if 'PROGRAM_KEYPAIR' in environ else None}"
+    )
+    parser.add_argument(
+        "-d",
+        "--create-data-account",
+        type=bool,
+        help="For the counter have place to save data a data account needs to be created manually first. This is for doing so.",
+        default=True
+    )
+    parser.add_argument(
+        "-s",
+        "--sleep-time",
+        type=int,
+        help="Sleep time between counter update processing in seconds.",
+        default=10
     )
     return parser.parse_args()
 
@@ -213,22 +228,22 @@ def get_counter_txn(
         fee_payer=public_key,
     ).add(counter_instruction)
 
-def get_delete_pda_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
+def get_delete_data_account_txn(public_key: PublicKey, program_key: PublicKey, recent_blockhash:Blockhash = None) -> Transaction:
     program_data_key = get_data_account_pubkey(public_key, program_key)
-    delete_pda_instruction = TransactionInstruction(
+    delete_account_instruction = TransactionInstruction(
         keys=[
             AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True),
             AccountMeta(pubkey=program_key, is_signer=True, is_writable=False),
             AccountMeta(pubkey=public_key, is_signer=True, is_writable=True),
         ],
         program_id=program_key,
-        data=layout.DELETE_PDA_INSTRUCTION.build({})
+        data=layout.DELETE_ACCOUNT_INSTRUCTION.build({})
     )
     return Transaction(
         recent_blockhash=recent_blockhash,
         nonce_info=None,
         fee_payer=public_key,
-    ).add(delete_pda_instruction)
+    ).add(delete_account_instruction)
 
 def delta_time(time_start_at: datetime, time_finished_at = None) -> float:
     if not time_finished_at:
@@ -245,9 +260,9 @@ async def get_rent_exemption_fee(client: AsyncClient) -> int:
 async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> CounterAccount:
     async with AsyncClient(rpc_url) as client:
         account_info_json = await client.get_account_info(pubkey=program_keypair.public_key)
-        if not account_info_json['result']['value']['executable']:
+        if not account_info_json or not account_info_json['result'] or not account_info_json['result']['value'] or not account_info_json['result']['value']['executable']:
             raise ValueError(f'Expected the account {program_keypair.public_key} is an executable program but it is not, {account_info_json}')
-        
+
         recent_blockhash_json = await client.get_recent_blockhash()
         recent_blockhash = Blockhash(recent_blockhash_json['result']['value']['blockhash'])
         lamport_per_signature:int = recent_blockhash_json['result']['value']['feeCalculator']['lamportsPerSignature']
@@ -263,39 +278,39 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
             print(f'Requested to get airdrop for {requested_lamports}, result: {response}')
 
         program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Processed)
-        # print(f"PDA account json: {pda_account_json}")
-        if not account_exists(pda_account_json):
-            print(f'Account {program_data_address} DOES NOT exists')
+        data_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
+        # print(f"Data account with seed json: {data_account_json}")
+        if not account_exists(data_account_json):
+            print(f'Account {program_data_address} DOES NOT exists, creating a new one ({data_account_json})')
             create_account_instruction = create_account_with_seed(CreateAccountWithSeedParams(
                 from_pubkey=keypair.public_key,
                 base_pubkey=keypair.public_key,
                 new_account_pubkey=program_data_address,
-                # seed=DERIVED_ADDRESS_SEED,
-                seed={"length": len(DERIVED_ADDRESS_SEED), "chars": DERIVED_ADDRESS_SEED},
+                # seed={"length": len(DERIVED_ADDRESS_SEED), "chars": DERIVED_ADDRESS_SEED},
+                seed=DERIVED_ADDRESS_SEED,
                 lamports=rent_exemption_fee,
                 space=layout.COUNTER_ACCOUNT.sizeof(),
                 program_id=program_keypair.public_key
             ))
-            pda_creation_txn = Transaction(
+            data_account_creation_txn = Transaction(
                 recent_blockhash=recent_blockhash,
                 nonce_info=None,
                 fee_payer=keypair.public_key,
             ).add(create_account_instruction)
-            # pda_creation_txn.sign(keypair)
-            # await client.simulate_transaction(pda_creation_txn)
+            # data_account_creation_txn.sign(keypair)
+            # await client.simulate_transaction(data_account_creation_txn)
             response = await client.send_transaction(
-                pda_creation_txn, keypair
+                data_account_creation_txn, keypair
             )
-            print(f'Create PDA account txn response: {response}')
-            while not account_exists(pda_account_json):
-                pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
+            print(f'Create Data account with seed txn response: {response}')
+            while not account_exists(data_account_json):
+                data_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
 
     print(f'account [{program_keypair.public_key}]: {account_info_json}')
     print(f'blockhash: {recent_blockhash}, lamport per sig: {lamport_per_signature}, rent exemption: {rent_exemption_fee}')
     print(f'balance [{keypair.public_key}]: {balance_json}')
-    print(f'pda account [{program_data_address}]: {pda_account_json}')
-    counter_account = CounterAccount(pda_account_json)
+    print(f'data account with seed [{program_data_address}]: {data_account_json}')
+    counter_account = CounterAccount(data_account_json)
     print(f'COUNTER PREPARE {counter_account.counter}/{counter_account.timestamp}')
     return counter_account
 
@@ -310,14 +325,18 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
             program_key = program_keypair.public_key,
             client_time = start_at
         )
-        response = await client.send_transaction(txn, keypair, program_keypair)
+        tx_opts = None
+        # tx_opts = TxOpts(skip_preflight=True, skip_confirmation=False)
+        response = await client.send_transaction(txn, keypair, program_keypair, opts=tx_opts)
         # print(f'Counter txn response on send: {response}')  # TODO: delete me
         if 'result' not in response:
             print(f'ERROR: cannot get information about sent transaction: {response}')
             return None
         txn_id = response['result']
+        number_of_attempts = 1
+        commitment_level = Confirmed
         while True:
-            response_txn = await client.get_transaction(txn_id)
+            response_txn = await client.get_transaction(txn_id, commitment=commitment_level)
             if 'result' in response_txn and response_txn['result']:
                 # print(f"DEBUG: {response_txn['result']}")  # TODO: delete me
                 finished_at = datetime.utcnow()
@@ -328,7 +347,12 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
                 finished_at= datetime.max  # TODO: consider handling timeout more clever
                 block_time = datetime.max
                 break
-        print(f'Transaction {response["result"]} takes {delta_time(start_at, finished_at)} seconds to be written to blockchain')
+            number_of_attempts += 1
+        if finished_at != datetime.max:
+            print(
+                f'Transaction {response["result"]} takes {delta_time(start_at, finished_at)} seconds to be written to blockchain, '
+                f'in committment level {commitment_level} while taking {number_of_attempts} number of attempts'
+            )
         return TransactionProcessingData(
             client_time=start_at,  # we use the client time as pard of the data.id()
             provider=provider,
@@ -338,8 +362,8 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
             txnblock_time=block_time
         )
         
-    # pda_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
-    # counter_account = CounterAccount(pda_account_json)
+    # data_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
+    # counter_account = CounterAccount(data_account_json)
     # print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}/{counter_account.client_timestamp}')
 
 
@@ -360,7 +384,7 @@ async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> Non
 # Error when sending from user wallet to a executable account
 # solana.rpc.core.RPCException: {'code': -32002, 'message': 'Transaction simulation failed: Transaction loads a writable account that cannot be written', 'data': {'accounts': None, 'err': 'InvalidWritableAccount', 'logs': [], 'unitsConsumed': 0}}
 # ---
-# Error when sending from PDA to wallet
+# Error when sending from Data Account to wallet
 # solana.rpc.core.RPCException: {'code': -32602, 'message': 'invalid transaction: Transaction failed to sanitize accounts offsets correctly'}
 # ---
 # Transfering from program to a wallet can be done only in smart contract, the data program is owned by program and not by system 11111111111111 program
@@ -387,9 +411,9 @@ async def delete_program_data_account_1(rpc_url: str, keypair:Keypair, program_k
 async def delete_program_data_account_2(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> None:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
         program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
-        print(f'PDA pubkey: {program_data_address}')
-        delete_pda_txn = get_delete_pda_txn(keypair.public_key, program_keypair.public_key)
-        response = await client.send_transaction(delete_pda_txn, keypair, program_keypair)
+        print(f'Data account with seed pubkey: {program_data_address}')
+        delete_data_account_txn = get_delete_data_account_txn(keypair.public_key, program_keypair.public_key)
+        response = await client.send_transaction(delete_data_account_txn, keypair, program_keypair)
         print(f'>>delete_program> {response}')
 
 def solana_account_ws_subscription(address: str, commitment: str = str(Processed)) -> dict:
@@ -445,12 +469,13 @@ async def work_with_counter(args: Namespace, shared_processing_data: dict):
     print(f'User pubkey: "{keypair.public_key}, program key: {program_keypair.public_key}')
     print('-' * 120 + '\n\n')
 
-    # await prepare(args.url, keypair, program_keypair)
+    if args.create_data_account:
+        await prepare(args.url, keypair, program_keypair)
     for i in range(1,20):
         print(f'LOOP {i}')
         txn_data = await increase_counter_and_wait(args.url, keypair, program_keypair)
         update_in_shared_dict(shared_processing_data, txn_data)
-        await asyncio.sleep(20)
+        await asyncio.sleep(args.sleep_time)
     # await get_all_program_accounts(args.url, program_keypair)
     # await delete_program_data_account_2(args.url, keypair, program_keypair)
 
@@ -474,12 +499,27 @@ async def update_db(args: Namespace, shared_processing_data: dict):
 
 
 
-args = get_args()
+def main():
+    args = get_args()
 
-# asyncio.run(main(args))
-shared_processing_data: dict = {}  # key(provider+client_id) -> TransactionProcessingData
-loop = asyncio.get_event_loop()
-loop.create_task(work_with_counter(args, shared_processing_data))
-loop.create_task(work_with_ws(args, shared_processing_data))
-loop.create_task(update_db(args, shared_processing_data))
-loop.run_forever()
+    shared_processing_data: dict = {}  # key(provider+client_id) -> TransactionProcessingData
+    loop = asyncio.get_event_loop()
+
+    tasks = []
+    tasks += [loop.create_task(work_with_counter(args, shared_processing_data))]
+    # tasks += [loop.create_task(work_with_ws(args, shared_processing_data))]
+    # tasks += [loop.create_task(update_db(args, shared_processing_data))]
+
+    try:
+        futures = asyncio.gather(*tasks, return_exceptions=True)
+        loop.run_until_complete(futures)
+        print(futures.result())
+    except SystemExit:
+        print("caught SystemExit!")
+        futures.exception()
+        raise
+    finally:
+        loop.close()
+
+if __name__ == "__main__":
+    main()

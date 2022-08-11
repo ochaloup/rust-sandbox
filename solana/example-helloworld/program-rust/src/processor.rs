@@ -11,15 +11,15 @@ use solana_program::{
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{
-    instructions::{ChkpCounterAccount, parse_instruction, InstructionTypes},
-    errors::ChkpCounterError::{InvalidInstruction, AmountOverflow, WrongCounterClientTimestamp}
+    instructions::{TestCounterAccount, parse_instruction, InstructionTypes},
+    errors::TestCounterError::{InvalidInstruction, AmountOverflow, WrongCounterClientTimestamp}
 };
 
 pub struct Processor;
 impl Processor {
     pub fn process(
         program_id: &Pubkey,       // Public key of this program
-        accounts: &[AccountInfo],  // The PDA account where the data is saved
+        accounts: &[AccountInfo],  // The data account where the data is saved
         instruction_data: &[u8],   // Data passed with the transaction
     ) -> ProgramResult {
         Self::verify_program_owner(program_id, accounts)?;
@@ -27,7 +27,7 @@ impl Processor {
         let (instruction_type, rest_data) = parse_instruction(instruction_data);
         return match instruction_type {
             InstructionTypes::Counter => Self::process_counter(program_id, accounts, rest_data),
-            InstructionTypes::DeletePda => Self::process_delete_data_account(accounts),
+            InstructionTypes::DeleteAccount => Self::process_delete_data_account(accounts),
             _ => Err(InvalidInstruction.into())
         };
     }
@@ -59,7 +59,7 @@ impl Processor {
         accounts: &[AccountInfo],
         instruction_data: &[u8],
     ) -> ProgramResult {
-        msg!("ChainKeepers counter program running");
+        msg!("Counter program running");
 
         let accounts_iter = &mut accounts.iter();
         let data_account = next_account_info(accounts_iter)?;
@@ -81,7 +81,7 @@ impl Processor {
             Ok(data) => data
         };
 
-        let mut counter_account = ChkpCounterAccount::try_from_slice(&data_account.data.borrow())?;
+        let mut counter_account = TestCounterAccount::try_from_slice(&data_account.data.borrow())?;
         counter_account.counter += 1;
         counter_account.client_timestamp = i64::from_le_bytes(timestamp_data); // all encoding is little endian
         counter_account.timestamp = timestamp;
@@ -153,17 +153,17 @@ mod test {
 
         let accounts = vec![data_account.clone(), program_account.clone()];
 
-        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        let account = TestCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 0);
         assert_eq!(account.timestamp, 0);
 
         Processor::process_counter(&program_pubkey, &accounts, &timestamp_data).unwrap();
-        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        let account = TestCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 1);
         assert_eq!(account.timestamp, -1);
 
         Processor::process_counter(&program_pubkey, &accounts, &timestamp_data).unwrap();
-        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        let account = TestCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 2);
         assert_eq!(account.timestamp, -1);
 
@@ -175,7 +175,7 @@ mod test {
         let mut instruction_data = vec![1];
         instruction_data.extend(timestamp_data);
         Processor::process(&program_pubkey, &accounts, &instruction_data).unwrap();
-        let account = ChkpCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
+        let account = TestCounterAccount::try_from_slice(&accounts[0].data.borrow()).unwrap();
         assert_eq!(account.counter, 3);
         assert_eq!(account.timestamp, -1);
 

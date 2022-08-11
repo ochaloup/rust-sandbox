@@ -1,9 +1,9 @@
 [package]
-name = "solana-chkp-counter"
+name = "solana-test-counter"
 version = "0.0.1"
-description = "ChainKeepers counter contract"
-authors = ["ChainKeepers.io <info@chainkeepers.io>"]
-repository = "https://github.com/chainkeepers/core"
+description = "Counter test contract"
+authors = ["chalda <ondrej.chaloupka@protom.me>"]
+repository = "https://github.com/ochaloup/rust-sandbox"
 edition = "2021"
 
 [features]
@@ -20,5 +20,5 @@ solana-program-test = "~1.9.7"
 solana-sdk = "~1.9.7"
 
 [lib]
-name = "chkpcounter"
+name = "testcounter"
 crate-type = ["cdylib", "lib"]

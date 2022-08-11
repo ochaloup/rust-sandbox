@@ -36,6 +36,6 @@ COUNTER_INSTRUCTION = construct.Struct(
     "client_timestamp" / TimestampAdapter()
 )
 
-DELETE_PDA_INSTRUCTION = construct.Struct(
+DELETE_ACCOUNT_INSTRUCTION = construct.Struct(
     "instruction_type" / construct.Const(2, construct.BytesInteger(1, signed = False, swapped=True)),
 )

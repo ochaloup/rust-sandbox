@@ -2131,18 +2131,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "solana-chkp-counter"
-version = "0.0.1"
-dependencies = [
- "borsh",
- "borsh-derive",
- "solana-program",
- "solana-program-test",
- "solana-sdk",
- "thiserror",
-]
-
-[[package]]
 name = "solana-compute-budget-program"
 version = "1.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2487,6 +2475,18 @@ dependencies = [
  "solana-program-runtime",
  "solana-sdk",
  "solana-vote-program",
+ "thiserror",
+]
+
+[[package]]
+name = "solana-test-counter"
+version = "0.0.1"
+dependencies = [
+ "borsh",
+ "borsh-derive",
+ "solana-program",
+ "solana-program-test",
+ "solana-sdk",
  "thiserror",
 ]
 
