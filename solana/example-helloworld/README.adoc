@@ -48,5 +48,8 @@ export PROGRAM_KEYPAIR=${PWD}/dist/program/testcounter-keypair.json
 cd client-python
 pip install -r requirements.txt
 
+# data account is created before calling the counter while cycle
 python3 hello_client.py -p ../program-rust/dist/program/testcounter-keypair.json
+# to skip creating the data account if it has been created already, time pause on cycle tries to 5 seconds
+python3 hello_client.py -p ../program-rust/dist/program/testcounter-keypair.json -d false -s 5
 ----

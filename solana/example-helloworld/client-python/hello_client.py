@@ -16,7 +16,7 @@ from argparse import ArgumentParser, Namespace
 from os import environ
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.types import TxOpts
-from solana.rpc.commitment import Processed, Finalized, Confirmed
+from solana.rpc.commitment import Commitment, Processed, Finalized, Confirmed
 from solana.keypair import Keypair
 from solana.publickey import PublicKey
 from solana.transaction import Transaction, TransactionInstruction, AccountMeta
@@ -210,10 +210,10 @@ def get_data_account_pubkey(public_key: PublicKey, program_key: PublicKey) -> Pu
 def get_counter_txn(
     public_key: PublicKey,
     program_key: PublicKey,
+    program_data_key: PublicKey,
     client_time: date = datetime.utcnow(),
     recent_blockhash:Blockhash = None
 ) -> Transaction:
-    program_data_key = get_data_account_pubkey(public_key, program_key)
     counter_instruction = TransactionInstruction(
         keys=[
             AccountMeta(pubkey=program_data_key, is_signer=False, is_writable=True),
@@ -314,17 +314,29 @@ async def prepare(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> Cou
     print(f'COUNTER PREPARE {counter_account.counter}/{counter_account.timestamp}')
     return counter_account
 
+async def print_data_account(client: AsyncClient, program_data_pubkey: PublicKey, commitment_level: Commitment):
+        data_account_json = await client.get_account_info(pubkey=program_data_pubkey, commitment=commitment_level)
+        counter_account = CounterAccount(data_account_json)
+        print(f'Counter data content: {counter_account.counter}/{counter_account.timestamp}/{counter_account.client_timestamp}')
 
-async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypair:Keypair) -> TransactionProcessingData:
+async def increase_counter_and_wait(
+    rpc_url: str,
+    keypair:Keypair,
+    program_keypair:Keypair,
+    commitment_level: Commitment = Confirmed
+) -> TransactionProcessingData:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
-        # program_data_address = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         provider: str = "onering"
         start_at: date = datetime.utcnow()
+        program_data_pubkey = get_data_account_pubkey(keypair.public_key, program_keypair.public_key)
         txn = get_counter_txn(
             public_key = keypair.public_key,
             program_key = program_keypair.public_key,
+            program_data_key=program_data_pubkey,
             client_time = start_at
         )
+        await print_data_account(client, program_data_pubkey, commitment_level)
+
         tx_opts = None
         # tx_opts = TxOpts(skip_preflight=True, skip_confirmation=False)
         response = await client.send_transaction(txn, keypair, program_keypair, opts=tx_opts)
@@ -353,6 +365,9 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
                 f'Transaction {response["result"]} takes {delta_time(start_at, finished_at)} seconds to be written to blockchain, '
                 f'in committment level {commitment_level} while taking {number_of_attempts} number of attempts'
             )
+
+        await print_data_account(client, program_data_pubkey, commitment_level)
+
         return TransactionProcessingData(
             client_time=start_at,  # we use the client time as pard of the data.id()
             provider=provider,
@@ -361,11 +376,6 @@ async def increase_counter_and_wait(rpc_url: str, keypair:Keypair, program_keypa
             finished_at=finished_at,
             txnblock_time=block_time
         )
-        
-    # data_account_json = await client.get_account_info(pubkey=program_data_address, commitment=Finalized)
-    # counter_account = CounterAccount(data_account_json)
-    # print(f'\nCOUNTER TXN {counter_account.counter}/{counter_account.timestamp}/{counter_account.client_timestamp}')
-
 
 async def get_all_program_accounts(rpc_url: str, program_keypair:Keypair) -> None:
     async with AsyncClient(endpoint = rpc_url, commitment=Confirmed) as client:
@@ -472,7 +482,7 @@ async def work_with_counter(args: Namespace, shared_processing_data: dict):
     if args.create_data_account:
         await prepare(args.url, keypair, program_keypair)
     for i in range(1,20):
-        print(f'LOOP {i}')
+        print(f'\nLOOP {i}')
         txn_data = await increase_counter_and_wait(args.url, keypair, program_keypair)
         update_in_shared_dict(shared_processing_data, txn_data)
         await asyncio.sleep(args.sleep_time)
