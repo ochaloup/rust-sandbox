@@ -22,13 +22,21 @@ impl OhMyStruct {
     }
 }
 
+impl OhMyStruct {
+    pub fn hello_space(self: &Self) {
+        println!("Hello space!")
+    }
+}
+
 #[macro_export]
 macro_rules! new_oh_my_struct {
     ($name:expr) => (OhMyStruct::new($name))
 }
 
 fn main() {
-    println!("Structured macro creation: {:?}", new_oh_my_struct!("Frodo"));
+    let oh_my_struct = new_oh_my_struct!("Frodo");
+    println!("Structured macro creation: {:?}", oh_my_struct);
+    oh_my_struct.hello_space();
 
     OhMyStruct::hello_world();
 
