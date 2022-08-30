@@ -1,0 +1,12 @@
+= Test project to work with macros
+
+Just a simple playground project
+
+== Various sources
+
+https://blog.logrocket.com/macros-in-rust-a-tutorial-with-examples/#parsingthenameandfieldofastruct::
+quite fine to use the code from
+https://faun.pub/a-brief-introduction-to-macros-in-rust-eb95cd5cd9f4::
+nicely written but already outdated
+https://jstrong.dev/posts/2020/productive-rust-implementing-traits-with-macros/::
+good notes

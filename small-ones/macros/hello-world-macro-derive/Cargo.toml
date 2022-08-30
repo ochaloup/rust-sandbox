@@ -1,9 +1,14 @@
 [package]
-name = "macros"
+name = "hello-world-macro-derive"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+proc-macro = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hello-world-macro-derive = { path = "hello-world-macro-derive" }
+syn = {version="1.0.99", features=["full","fold"]}
+quote = "1.0.21"
+proc-macro2 = "1.0.43"
