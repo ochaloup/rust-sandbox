@@ -10,3 +10,12 @@ https://faun.pub/a-brief-introduction-to-macros-in-rust-eb95cd5cd9f4::
 nicely written but already outdated
 https://jstrong.dev/posts/2020/productive-rust-implementing-traits-with-macros/::
 good notes
+
+=== Various code bases
+
+https://github.com/andrewlowndes/derive-from/blob/main/src/lib.rs::
+implementation of derive from
+https://github.com/JelteF/derive_more/blob/master/src/display.rs::
+implementation of "automated" formatting Display
+https://github.com/dtolnay/syn/tree/master/examples::
+syn macro usage examples
