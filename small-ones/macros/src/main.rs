@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[macro_use]
 extern crate hello_world_macro_derive;
 
@@ -26,6 +28,9 @@ macro_rules! new_oh_my_struct {
 }
 
 fn main() {
-    // println!("Hello, world! {:?}", new_oh_my_struct!("Frodo"));
+    println!("Structured macro creation: {:?}", new_oh_my_struct!("Frodo"));
+
     OhMyStruct::hello_world();
+
+    println!("Derived macro struct: {:?}", OhMyGosh{name: "First".to_string(), age: "One".to_string()});
 }
