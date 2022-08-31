@@ -10,8 +10,8 @@ trait HelloWorld {
 #[derive(Debug, HelloWorld)]
 #[discriminator([1,2,3,4,5,6,7,8])]
 struct OhMyStruct {
-    #[account(mut, signer)]
     name: String,
+    #[account(int)]
     age: u8,
 }
 
@@ -42,5 +42,5 @@ fn main() {
 
     OhMyStruct::hello_world();
 
-    println!("Derived macro struct: {:?}", OhMyGosh{name: "First".to_string(), age: "One".to_string()});
+    println!("Derived macro struct: {:?}", OhMyGosh{name: "First".to_string(), age: 24});
 }

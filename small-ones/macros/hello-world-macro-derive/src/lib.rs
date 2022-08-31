@@ -11,12 +11,12 @@ use quote::{ToTokens, quote};
 // use syn::{Ident};
 use syn::{Attribute, DeriveInput, parse_macro_input, Path, punctuated::Punctuated, Token};
 use syn_unnamed_struct::{Meta};
-// use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span};
 
 #[derive(Default)]
 struct FieldArgs {
-    pub mutate: bool,
-    pub signer: bool,
+    pub string: bool,
+    pub int: bool,
 }
 
 #[proc_macro_derive(HelloWorld, attributes(discriminator, account))]
@@ -36,7 +36,9 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
         }
     };
     output.extend(expanded);
-    
+
+    let sss: Ident = Ident::new("String",Span::call_site());
+    let iii: Ident = Ident::new("u64",Span::call_site());
     let obj = match data {
         syn::Data::Struct(obj) => obj,
         _ => panic!("Only structs supported in From macro")
@@ -52,13 +54,13 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
                 match meta {
                     Meta::Path(path) => {
                         match path.to_token_stream().to_string().as_str() {
-                            "mut" => {
-                                props.mutate = true;
+                            "string" => {
+                                props.string = true;
                             },
-                            "signer" => {
-                                props.signer = true;
+                            "int" => {
+                                props.int = true;
                             },
-                            _ => panic!("Unrecognised attribute of field {}", field_name.to_string())
+                            _ => panic!("Unrecognised attribute of field '{}'", field_name.to_string())
                         }
                     },
                     _ => panic!("Attribute for field {} contains urecognized value", field_name.to_string())
@@ -69,9 +71,12 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
         })
         .collect::<Vec<_>>();
     println!(">>>> Struct idents: {:?}", attributes.iter().map(|(i,_)| i).collect::<Vec<_>>());
-    let sss = proc_macro2::Ident::new("String",proc_macro2::Span::call_site());
-    let quoted_fields = attributes.iter().map(|(name,_)|{
-        quote!(#name: #sss)
+    let quoted_fields = attributes.iter().map(|(name,ops)|{
+        if ops.int {
+            quote!(#name: #iii)
+        } else {
+            quote!(#name: #sss)
+        }
     })
     .collect::<Vec<_>>();
     let struct_impl = quote! {
