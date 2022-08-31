@@ -68,9 +68,10 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
             (field_name,props)
         })
         .collect::<Vec<_>>();
-    println!(">>>> Struct idents: {:?}", attributes.iter().map(|(i,_)|) i);
-    let quoted_fields = attributes.iter().map(|(name,ops)|{
-        quote!(#attr: String)
+    println!(">>>> Struct idents: {:?}", attributes.iter().map(|(i,_)| i).collect::<Vec<_>>());
+    let sss = proc_macro2::Ident::new("String",proc_macro2::Span::call_site());
+    let quoted_fields = attributes.iter().map(|(name,_)|{
+        quote!(#name: #sss)
     })
     .collect::<Vec<_>>();
     let struct_impl = quote! {
