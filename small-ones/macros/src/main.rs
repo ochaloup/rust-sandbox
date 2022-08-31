@@ -8,6 +8,7 @@ trait HelloWorld {
 }
 
 #[derive(Debug, HelloWorld)]
+#[discriminator([1,2,3,4,5,6,7,8])]
 struct OhMyStruct {
     name: String,
     age: u8,

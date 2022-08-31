@@ -1,20 +1,21 @@
+#![allow(unused_imports)]
+
 // extern crate proc_macro;
 // extern crate syn;
 // #[macro_use]
 // extern crate quote;
 
-// use std::{collections::HashMap};
+use std::{collections::HashMap};
 use proc_macro::{TokenStream};
-// use quote::{ToTokens};
-use quote::{quote};
-// use syn::{Path, punctuated::Punctuated, Token, Ident};
-use syn::{DeriveInput, parse_macro_input};
+use quote::{ToTokens, quote};
+// use syn::{Ident};
+use syn::{Attribute, DeriveInput, parse_macro_input, Path, punctuated::Punctuated, Token};
 // use proc_macro2::{Ident, Span};
 
-#[proc_macro_derive(HelloWorld)]
+#[proc_macro_derive(HelloWorld, attributes(discriminator))]
 pub fn derive_trait(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
-    let DeriveInput { ident, attrs:_, data, .. } = &input;
+    let DeriveInput { ident, attrs, data, .. } = &input;
 
     let mut output = proc_macro2::TokenStream::new();
     
@@ -52,6 +53,40 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
         }
     };
     output.extend(struct_impl);
+
+    // let type_names = attrs.iter().filter(|a| a.path.is_ident("discriminator")).flat_map(|attr| {
+    //     attr.parse_args_with(Punctuated::<Path, Token![,]>::parse_terminated).expect("Could not parse 'discriminator' attribute")
+    // }).map(|path| {
+    //     (path.to_token_stream().to_string(), path)
+    // }).collect::<HashMap<String, Path>>();
+    // let n = type_names.iter().map(|(k,_)| {k}).collect::<Vec<_>>();
+    // ---
+    // println!(">>>> struct attributes: {:?}", n);
+    // for i in 0..attrs.len() {
+    //     if input.attrs[i].path.is_ident("discriminator") {
+    //         let discriminator: &Attribute = input.attrs.get(i).unwrap();
+    //         if discriminator.tokens.is_empty() {
+    //             panic!("Failed to read discriminator data as have no data");
+    //         }
+    //         let tokens = discriminator.tokens.clone().into_iter();
+    //         for data in tokens {
+    //             brace_token: syn::braced!(content in input)
+    //             let data_str: String = data.to_string();
+    //             println!("next token: '{}'", data_str);
+    //         }
+    //     }
+    // }
+
+    let discriminator_attrs = attrs.iter().filter(|a| a.path.is_ident("discriminator"))
+        // .flat_map(|attr| {attr.tokens.clone()}).collect::<Vec<_>>();
+        .flat_map(|attr| {attr.tokens.clone()}).collect::<Vec<_>>();
+    let discriminator_attr = discriminator_attrs.get(0).unwrap();
+    let discriminator_impl = quote! {
+        impl OhMyGosh {
+            const DISCRIMINATOR:[u8;8] = #discriminator_attr;
+        }
+    };
+    output.extend(discriminator_impl);
 
     output.into()
 }
