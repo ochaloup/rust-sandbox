@@ -10,9 +10,16 @@ use proc_macro::{TokenStream};
 use quote::{ToTokens, quote};
 // use syn::{Ident};
 use syn::{Attribute, DeriveInput, parse_macro_input, Path, punctuated::Punctuated, Token};
+use syn_unnamed_struct::{Meta};
 // use proc_macro2::{Ident, Span};
 
-#[proc_macro_derive(HelloWorld, attributes(discriminator))]
+#[derive(Default)]
+struct FieldArgs {
+    pub mutate: bool,
+    pub signer: bool,
+}
+
+#[proc_macro_derive(HelloWorld, attributes(discriminator, account))]
 pub fn derive_trait(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let DeriveInput { ident, attrs, data, .. } = &input;
@@ -38,11 +45,31 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
         .iter()
         .map(|field| {
             let field_name = field.ident.as_ref().expect("Structs must contain named fields").clone();
-            field_name
+            let mut props = FieldArgs::default();
+            field.attrs.iter().filter(|a| a.path.is_ident("account")).flat_map(|attr| {
+                attr.parse_args_with(<Punctuated<Meta, Token![,]>>::parse_terminated).expect("Could not parse 'from' attribute")
+            }).for_each(|meta| {
+                match meta {
+                    Meta::Path(path) => {
+                        match path.to_token_stream().to_string().as_str() {
+                            "mut" => {
+                                props.mutate = true;
+                            },
+                            "signer" => {
+                                props.signer = true;
+                            },
+                            _ => panic!("Unrecognised attribute of field {}", field_name.to_string())
+                        }
+                    },
+                    _ => panic!("Attribute for field {} contains urecognized value", field_name.to_string())
+                }
+            });
+
+            (field_name,props)
         })
         .collect::<Vec<_>>();
-    println!(">>>> Struct idents: {:?}", attributes);
-    let quoted_fields = attributes.iter().map(|attr|{
+    println!(">>>> Struct idents: {:?}", attributes.iter().map(|(i,_)|) i);
+    let quoted_fields = attributes.iter().map(|(name,ops)|{
         quote!(#attr: String)
     })
     .collect::<Vec<_>>();

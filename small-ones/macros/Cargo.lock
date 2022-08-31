@@ -9,6 +9,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+ "syn-unnamed-struct",
 ]
 
 [[package]]
@@ -45,6 +46,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "syn-unnamed-struct"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db0794191b3a4553c98f8f5302470618fdd9bd533a8314d06dab0e70a4de0269"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
