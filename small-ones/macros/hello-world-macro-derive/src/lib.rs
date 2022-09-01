@@ -47,6 +47,28 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
         .iter()
         .map(|field| {
             let field_name = field.ident.as_ref().expect("Structs must contain named fields").clone();
+
+            print!("field {:?} is type {:?}", field_name.to_token_stream().to_string(), field.ty.to_token_stream().to_string());
+            match &field.ty {
+                syn::Type::Array(_ty) => {println!("; is array")}
+                syn::Type::BareFn(_ty) => {println!("; is bare fn")}
+                syn::Type::Group(_ty) => {println!("; is group")}
+                syn::Type::ImplTrait(_ty) => {println!("; is ImplTrait")}
+                syn::Type::Infer(_ty) => {println!("; is Infer")}
+                syn::Type::Macro(_ty) => {println!("; is Macro")}
+                syn::Type::Never(_ty) => {println!("; is Never")}
+                syn::Type::Paren(_ty) => {println!("; is Paren")}
+                syn::Type::Path(_ty) => {println!("; is Path")}
+                syn::Type::Ptr(_ty) => {println!("; is Ptr")}
+                syn::Type::Reference(_ty) => {println!("; is Reference")}
+                syn::Type::Slice(_ty) => {println!("; is Slice")}
+                syn::Type::TraitObject(_ty) => {println!("; is TraitObject")}
+                syn::Type::Tuple(_ty) => {println!("; is Tuple")}
+                syn::Type::Verbatim(_ty) => {println!("; is verbatim")}
+                #[cfg_attr(test, deny(non_exhaustive_omitted_patterns))]
+                _ => { println!("; cannot find type of ty Type") }
+            }
+
             let mut props = FieldArgs::default();
             field.attrs.iter().filter(|a| a.path.is_ident("account")).flat_map(|attr| {
                 attr.parse_args_with(<Punctuated<Meta, Token![,]>>::parse_terminated).expect("Could not parse 'from' attribute")
