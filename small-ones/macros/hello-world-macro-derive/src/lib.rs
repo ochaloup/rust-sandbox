@@ -19,7 +19,7 @@ struct FieldArgs {
     pub int: bool,
 }
 
-#[proc_macro_derive(HelloWorld, attributes(discriminator, account))]
+#[proc_macro_derive(HelloWorld, attributes(my_id, discriminator, account))]
 pub fn derive_trait(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let DeriveInput { ident, attrs, data, .. } = &input;
@@ -114,12 +114,21 @@ pub fn derive_trait(input: TokenStream) -> TokenStream {
         // .flat_map(|attr| {attr.tokens.clone()}).collect::<Vec<_>>();
         .flat_map(|attr| {attr.tokens.clone()}).collect::<Vec<_>>();
     let discriminator_attr = discriminator_attrs.get(0).unwrap();
-    let discriminator_impl = quote! {
+    let my_ids = attrs.iter().filter(|a| a.path.is_ident("my_id"))
+        .flat_map(|attr|
+            attr.parse_args_with(Punctuated::<Path, Token![,]>::parse_terminated).expect("Could not parse 'my_id' attribute")
+        ).collect::<Vec<_>>();
+    let my_id = my_ids.get(0).unwrap();
+    let oh_my_gosh_impl = quote! {
         impl OhMyGosh {
             const DISCRIMINATOR:[u8;8] = #discriminator_attr;
+
+            pub fn get_id() -> String {
+                #my_id.to_string()
+            }
         }
     };
-    output.extend(discriminator_impl);
+    output.extend(oh_my_gosh_impl);
 
     output.into()
 }

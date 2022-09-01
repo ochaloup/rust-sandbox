@@ -3,12 +3,15 @@
 #[macro_use]
 extern crate hello_world_macro_derive;
 
+const MY_ID: &str = "my-identity-stuff";
+
 trait HelloWorld {
     fn hello_world(); 
 }
 
 #[derive(Debug, HelloWorld)]
 #[discriminator([1,2,3,4,5,6,7,8])]
+#[my_id(MY_ID)]
 struct OhMyStruct {
     name: String,
     #[account(int)]
