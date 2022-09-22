@@ -1,0 +1,14 @@
+[features]
+seeds = false
+[programs.localnet]
+marinade_rs_sdk_test = "HyZYMjt8ijqkX6L56Fe2FWm6EQJLLLgxmECU2ZSc5Zrq"
+
+[registry]
+url = "https://anchor.projectserum.com"
+
+[provider]
+cluster = "localnet"
+wallet = "/home/chalda/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
