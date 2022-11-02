@@ -21,4 +21,4 @@ overflow-checks = true
 [dependencies]
 anchor-lang = "0.25.0"
 # marinade-sdk = { git = "https://github.com/marinade-finance/marinade-sdk", features = ["no-entrypoint"] }
-marinade-anchor-sdk = { path = "/home/chalda/marinade/marinade-sdk/libs/marinade-anchor-sdk" }
+marinade-sdk = { path = "/home/chalda/marinade/marinade-sdk/libs/marinade-sdk" }

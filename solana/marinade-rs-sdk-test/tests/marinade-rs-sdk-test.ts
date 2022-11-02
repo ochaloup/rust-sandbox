@@ -1,12 +1,12 @@
 import * as anchor from "@project-serum/anchor";
 import { Program } from "@project-serum/anchor";
-import { MarinadeRsSdk } from "../target/types/marinade_rs_sdk";
+import { MarinadeRsSdkTest } from "../target/types/marinade_rs_sdk_test";
 
-describe("marinade-rs-sdk", () => {
+describe("marinade-rs-sdk-test", () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
 
-  const program = anchor.workspace.MarinadeRsSdk as Program<MarinadeRsSdk>;
+  const program = anchor.workspace.MarinadeRsSdkTest as Program<MarinadeRsSdkTest>;
 
   it("Is initialized!", async () => {
     // Add your test here.

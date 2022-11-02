@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use marinade_sdk::instructions::deposit::{DepositData};
 
 declare_id!("HyZYMjt8ijqkX6L56Fe2FWm6EQJLLLgxmECU2ZSc5Zrq");
 

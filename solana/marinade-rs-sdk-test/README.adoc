@@ -1,4 +1,4 @@
-= Tester for marinade SDK
+= Tester for Marinade SDK
 
 This is a tester repo for marinade SDK calls.
 The Marinade SDK for Rust is at
@@ -19,7 +19,7 @@ solana logs --url localhost
 anchor build
 
 # check the program id that will be used while deploying to validator
-solana-keygen pubkey target/deploy/marinade_rs_sdk-keypair.json
+solana-keygen pubkey target/deploy/marinade_rs_sdk_test-keypair.json
 # ---> now change appropriatelly the `Anchor.toml` and `lib.rs` + rebuild
 
 anchor build; anchor deploy

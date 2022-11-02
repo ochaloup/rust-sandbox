@@ -23,15 +23,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anchor-adapter"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "derive_more",
- "micro-anchor",
-]
-
-[[package]]
 name = "anchor-attribute-access-control"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -774,19 +765,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "marinade-anchor-sdk"
-version = "0.1.0"
-dependencies = [
- "anchor-adapter",
- "marinade-sdk",
-]
-
-[[package]]
 name = "marinade-rs-sdk-test"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
- "marinade-anchor-sdk",
+ "marinade-sdk",
 ]
 
 [[package]]
